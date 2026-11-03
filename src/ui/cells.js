@@ -11,12 +11,12 @@ const norm = (row) => (typeof row === 'string' ? [s(row)] : row);
 export const rowWidth = (row) => norm(row).reduce((n, seg) => n + width(seg.t), 0);
 export const tint = (row, bg) => Object.assign(norm(row), { bg });
 
-export function fit(row, w, bg = '') {
+export function fit(row, w, bg = '', ellipsis = false) {
   const out = [];
   let used = 0;
   for (const seg of norm(row)) {
     if (used >= w) break;
-    const t = truncate(seg.t, w - used);
+    const t = truncate(seg.t, w - used, ellipsis);
     out.push({ ...seg, t });
     used += width(t);
   }
@@ -42,7 +42,7 @@ export function hcat(columns) {
 export function box(w, title, rows, border = 'ln', titleStyle = 'f0 B') {
   const label = truncate(title, Math.max(0, w - 5));
   const top = [s('╭─', border), s(` ${label} `, titleStyle), s(`${'─'.repeat(Math.max(0, w - width(label) - 5))}╮`, border)];
-  const body = rows.map((row) => [s('│ ', border), ...fit(row, w - 4), s(' │', border)]);
+  const body = rows.map((row) => [s('│ ', border), ...fit(row, w - 4, '', true), s(' │', border)]);
   return [top, ...body, [s(`╰${'─'.repeat(w - 2)}╯`, border)]];
 }
 

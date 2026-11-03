@@ -67,6 +67,13 @@ test('merge dialog is exact and lists what did not verify the PR', () => {
   assert.match(big, /a3f91c2/);
 });
 
+test('text cut off in a card shows an ellipsis and keeps the exact width', () => {
+  const card = makeCard({ threads: [], pr: { statusCheckRollup: [{ name: '아주아주아주아주아주아주아주아주 긴 체크 이름', status: 'COMPLETED', conclusion: 'FAILURE' }] } });
+  const rows = renderBoard({ cards: [card], selectedKey: card.key, status, now: NOW, message: '' }, 120, 30);
+  assertExact(rows, 120, 30, 'ellipsis');
+  assert.match(rows.map(toPlain).join('\n'), /…/);
+});
+
 test('remote escape sequences never reach the screen', () => {
   const card = makeCard({ pr: { title: 'evil\u001b]52;c;aGk=\u0007\u001b[2Jtitle', body: 'x\u001b[31my' }, threads: [] });
   const plain = renderDetail({ card, status, now: NOW, tab: 'overview', scroll: 0, fileIndex: 0, files, threadIndex: 0, ciLog: null }, 120, 30).map(toPlain).join('\n');

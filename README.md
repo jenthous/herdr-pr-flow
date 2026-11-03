@@ -1,6 +1,12 @@
 # PR Flow
 
+**English** | [한국어](README.ko.md)
+
 A [Herdr](https://herdr.dev) plugin for the part of the job after your agent opens a pull request.
+
+![PR Flow: a CI failure goes to the agent, the fixed PR comes back to you, and you merge from the terminal](docs/demo.gif)
+
+*The plugin's real screens, drawn with sample data.*
 
 PR Flow finds the PR each agent opened and sends CI failures and AI review comments back to that agent. It calls you when a decision is yours, and you verify and merge from the terminal.
 
@@ -125,4 +131,5 @@ npm test
 herdr plugin link "$PWD"
 node bin/board.js --dump --plain --pr <url>   # read-only snapshot of a real PR
 PR_FLOW_DRY_RUN=1 node bin/board.js           # interactive, sends and changes nothing
+node scripts/demo-frames.js <dir>             # README demo frames as HTML
 ```
