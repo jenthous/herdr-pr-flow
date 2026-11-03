@@ -17,7 +17,7 @@ A check that doesn't exist never counts as passed. The card says `no CI`, and th
 
 ## Status
 
-Early release (0.1.0). The board and PR screens have been run against real pull requests. Merging, auto-fix prompts, and other actions that write to GitHub or an agent are covered by automated tests with fakes but haven't been run end to end yet. Try them on a repo you can afford to experiment with, and start with auto-fix off (`a`).
+Early release (0.1.0). The full flow has been run end to end on a test repo with real GitHub Actions and a real Claude Code agent, including auto-fix and merging. It hasn't had much everyday use yet, and other agents such as Codex haven't been tried. Start on a repo you can afford to experiment with, and turn auto-fix off with `a` until you trust it.
 
 ## Requirements
 

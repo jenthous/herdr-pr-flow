@@ -42,6 +42,15 @@ export function parseRemote(remote) {
   return m ? `${m[1]}/${m[2]}` : null;
 }
 
+// `gh run view --log-failed` prefixes every line with job, step and timestamp.
+export function cleanRunLog(log) {
+  return String(log)
+    .split('\n')
+    .map((line) => line.replace(/^[^\t]*\t[^\t]*\t\d{4}-\d{2}-\d{2}T[\d:.]+Z ?/, ''))
+    .filter((line) => !/^##\[(group|endgroup)\]/.test(line))
+    .join('\n');
+}
+
 export function runIdFromCheck(check) {
   const m = /\/actions\/runs\/(\d+)/.exec(check?.detailsUrl ?? check?.targetUrl ?? '');
   return m ? m[1] : null;
@@ -70,7 +79,7 @@ export const gh = {
     const list = await json(['pr', 'list', '-R', repo, '--state', 'merged', '--limit', '10', '--json', 'latestReviews']);
     return list.flatMap((pr) => pr.latestReviews.map((r) => r.author));
   },
-  failedLog: (repo, runId) => action(['run', 'view', runId, '-R', repo, '--log-failed'], { timeout: 120_000 }),
+  failedLog: async (repo, runId) => cleanRunLog(await action(['run', 'view', runId, '-R', repo, '--log-failed'], { timeout: 120_000 })),
   rerunFailed: (repo, runId) => action(['run', 'rerun', runId, '-R', repo, '--failed']),
   merge: (url, method, sha) => action(['pr', 'merge', url, `--${method}`, '--match-head-commit', sha]),
   comment: (url, body) => action(['pr', 'comment', url, '--body', body]),

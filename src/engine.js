@@ -19,6 +19,7 @@ export function createEngine({ gh, herdr, git, store, config, canAct, dryRun = f
   const live = new Map(); // url -> { pr, threads, comments, error, fetchedAt }
   const repoInfo = new Map(); // repo -> { at, defaultBranch, expectsAi, methods }
   const discovered = new Map(); // repo:branch -> at
+  const previousStatus = new Map(); // pane id -> last agent status
   let agents = [];
   let viewer = '';
   let lastError = '';
@@ -77,10 +78,19 @@ export function createEngine({ gh, herdr, git, store, config, canAct, dryRun = f
       agents = await Promise.all(list.map(async (agent) => ({ ...agent, git: await git.describe(agent.foreground_cwd || agent.cwd) })));
       await Promise.all(agents.filter((a) => a.git?.repo && a.git.branch).map(discover));
       lastError = '';
+      await refreshFinished();
     } catch (error) {
       lastError = `herdr: ${error.message}`;
     }
     emit();
+  }
+
+  // An agent that just finished has probably pushed. Look now instead of waiting for the next poll.
+  async function refreshFinished() {
+    const finished = agents.filter((a) => previousStatus.get(a.pane_id) === 'working' && a.agent_status !== 'working');
+    for (const a of agents) previousStatus.set(a.pane_id, a.agent_status);
+    const entries = finished.flatMap((a) => Object.values(tracked).filter((t) => t.repo === a.git?.repo && t.branch === a.git?.branch));
+    await Promise.all(entries.map((entry) => refresh(entry.url)));
   }
 
   async function discover(agent) {
@@ -143,6 +153,7 @@ export function createEngine({ gh, herdr, git, store, config, canAct, dryRun = f
       activity: sanitize(agent?.terminal_title_stripped ?? ''),
       autoFix: settings.autoFix && store.data.autoFixEnabled !== false && data.pr.author?.login === viewer,
       autoStopped: entry.fix.stopped,
+      fix: entry.fix,
       expectsAi: data.repoInfo?.expectsAi ?? false,
     }, settings);
   }
@@ -169,7 +180,7 @@ export function createEngine({ gh, herdr, git, store, config, canAct, dryRun = f
 
   async function perform(entry, data, result, decision) {
     if (decision.type === 'stop') {
-      entry.fix = recordSend(entry.fix, decision);
+      entry.fix = recordSend(entry.fix, decision, now());
       log(`#${entry.number} auto-fix stopped: ${decision.reason}`);
       return;
     }
@@ -183,7 +194,7 @@ export function createEngine({ gh, herdr, git, store, config, canAct, dryRun = f
       await herdr.prompt(agent.pane_id, prompt);
       log(`#${entry.number} sent ${decision.type} to ${agent.pane_id}`);
     }
-    entry.fix = recordSend(entry.fix, decision);
+    entry.fix = recordSend(entry.fix, decision, now());
   }
 
   async function logsFor(entry, ci) {
@@ -256,7 +267,17 @@ export function createEngine({ gh, herdr, git, store, config, canAct, dryRun = f
       const defaultBranch = repoInfo.get(repo)?.defaultBranch;
       if (!defaultBranch) info(repo).then(emit).catch(() => {});
       if (!defaultBranch || branch === defaultBranch) continue;
-      out.push({ key: `agent:${agent.pane_id}`, noPr: true, column: 'agent', tone: 'dim', headline: sanitize(agent.terminal_title_stripped ?? '') || 'no PR yet', repo, branch, agent });
+      const blocked = agent.agent_status === 'blocked';
+      out.push({
+        key: `agent:${agent.pane_id}`,
+        noPr: true,
+        column: blocked ? 'you' : 'agent',
+        tone: blocked ? 'bad' : 'dim',
+        headline: blocked ? 'agent needs your input' : sanitize(agent.terminal_title_stripped ?? '') || 'no PR yet',
+        repo,
+        branch,
+        agent,
+      });
     }
     return out;
   }
@@ -293,7 +314,8 @@ export function createEngine({ gh, herdr, git, store, config, canAct, dryRun = f
     settingsOf,
     live: (url) => live.get(url),
     logsFor,
-    status: () => ({ viewer, lastError, lastSync, canAct: canAct(), autoFix: store.data.autoFixEnabled !== false, dryRun }),
+    // Auto-fix needs both the board switch and the repo's setting, so report the effective value.
+    status: (repo) => ({ viewer, lastError, lastSync, canAct: canAct(), autoFix: store.data.autoFixEnabled !== false && settingsOf(repo ?? '').autoFix, dryRun }),
     toggleAutoFix() {
       store.data.autoFixEnabled = store.data.autoFixEnabled === false;
       store.save();

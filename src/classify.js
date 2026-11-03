@@ -15,6 +15,8 @@ const KNOWN_AI = new Set([
   'claude',
 ]);
 
+const SEND_GRACE_MS = 30_000;
+
 const FAILED_CONCLUSIONS = new Set(['FAILURE', 'TIMED_OUT', 'CANCELLED', 'ACTION_REQUIRED', 'STARTUP_FAILURE']);
 const FAILED_STATES = new Set(['FAILURE', 'ERROR']);
 
@@ -103,13 +105,24 @@ export function classify(pr, ctx, settings) {
   if (pr.reviewDecision === 'CHANGES_REQUESTED') return place('you', 'bad', 'changes requested');
   if (humanThreads.length) return place('you', 'warn', `${humanThreads.length} open comment${humanThreads.length > 1 ? 's' : ''}`);
   if (pr.mergeable === 'CONFLICTING') return place('you', 'bad', 'merge conflict');
+  // Once a failure has been sent, the agent gets a moment to start. If it then stops with no
+  // new commit, it gave up or asked a question, and only a person can move the PR forward.
+  const fix = ctx.fix ?? {};
+  const justSent = ctx.now - (fix.lastSentAt ?? 0) < SEND_GRACE_MS;
+  const canFix = ctx.autoFix && ctx.agent;
   if (ci.kind === 'failed') {
-    const canFix = ctx.autoFix && ctx.agent;
-    return canFix ? place('agent', 'warn', 'sending CI failure to agent') : place('you', 'bad', `CI failed: ${ci.failed[0].name}`);
+    const signature = ci.failed.map((f) => f.name).sort().join('|');
+    const sent = fix.sentCi?.[`${pr.headRefOid}:${signature}`];
+    if (!canFix) return place('you', 'bad', `CI failed: ${ci.failed[0].name}`);
+    if (!sent) return place('agent', 'warn', 'sending CI failure to agent');
+    return justSent ? place('agent', 'warn', 'CI failure sent to agent') : place('you', 'bad', 'agent stopped, CI still failing');
   }
   if (ai.kind === 'comments') {
-    const canFix = ctx.autoFix && ctx.agent;
-    return canFix ? place('agent', 'warn', 'sending AI review to agent') : place('you', 'warn', `${ai.open.length} AI comment${ai.open.length > 1 ? 's' : ''} open`);
+    const count = `${ai.open.length} AI comment${ai.open.length > 1 ? 's' : ''}`;
+    const unsent = ai.open.some((t) => !fix.sentThreads?.includes(t.id));
+    if (!canFix) return place('you', 'warn', `${count} open`);
+    if (unsent) return place('agent', 'warn', 'sending AI review to agent');
+    return justSent ? place('agent', 'warn', 'AI review sent to agent') : place('you', 'warn', `agent stopped, ${count} open`);
   }
   if (ci.kind === 'pending' || ci.kind === 'starting') return place('waiting', 'info', 'waiting for CI');
   if (ai.kind === 'pending') return place('waiting', 'info', 'waiting for AI review');

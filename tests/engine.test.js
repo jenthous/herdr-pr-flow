@@ -56,6 +56,41 @@ test('finds the PR from the agent branch and sends the CI failure once', async (
   assert.equal(ctx.store.data.tracked[URL].fix.attempts, 1);
 });
 
+test('an agent that stops without a new commit comes back to you, and is not sent it again', async () => {
+  const ctx = setup();
+  await boot(ctx);
+  assert.equal(ctx.engine.cards()[0].column, 'agent');
+  assert.equal(ctx.engine.cards()[0].headline, 'CI failure sent to agent');
+  ctx.advance(60_000);
+  await ctx.engine.refresh(URL);
+  const [card] = ctx.engine.cards();
+  assert.equal(card.column, 'you');
+  assert.equal(card.headline, 'agent stopped, CI still failing');
+  assert.equal(ctx.calls.prompts.length, 1);
+  assert.equal(ctx.calls.notifies.length, 1);
+  assert.match(ctx.calls.notifies[0].title, /agent stopped/);
+});
+
+test('a new commit that still fails goes back to the agent', async () => {
+  const ctx = setup();
+  await boot(ctx);
+  ctx.advance(60_000);
+  await ctx.engine.refresh(URL);
+  ctx.world.pr = { ...ctx.world.pr, headRefOid: 'sha2' };
+  await ctx.engine.refresh(URL);
+  assert.equal(ctx.calls.prompts.length, 2);
+  assert.equal(ctx.engine.cards()[0].column, 'agent');
+});
+
+test('an agent finishing refreshes its PR right away', async () => {
+  const ctx = setup({ agentStatus: 'working', prOver: { statusCheckRollup: [] } });
+  await boot(ctx);
+  ctx.world.pr = { ...ctx.world.pr, title: 'pushed just now' };
+  ctx.world.status = 'done';
+  await ctx.engine.pollAgents();
+  assert.equal(ctx.engine.cards()[0].data.pr.title, 'pushed just now');
+});
+
 test('dry run logs the prompt and sends nothing', async () => {
   const ctx = setup({ dryRun: true });
   await boot(ctx);
@@ -121,6 +156,16 @@ test('an agent with a feature branch and no PR shows as no PR yet', async () => 
   assert.equal(card.column, 'agent');
   assert.equal(card.branch, 'fix');
   assert.equal(ctx.calls.prompts.length, 0);
+});
+
+test('a blocked agent with no PR comes to your turn', async () => {
+  const ctx = setup({ discoverUrl: null, agentStatus: 'blocked' });
+  await boot(ctx);
+  ctx.engine.cards();
+  await new Promise((resolve) => setImmediate(resolve));
+  const [card] = ctx.engine.cards();
+  assert.equal(card.column, 'you');
+  assert.equal(card.headline, 'agent needs your input');
 });
 
 test('an agent on the default branch with no PR is not shown', async () => {

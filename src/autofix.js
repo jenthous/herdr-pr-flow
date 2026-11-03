@@ -8,7 +8,7 @@ const SAME_FAILURE_LIMIT = 3;
 const MAX_PROMPT_LOG = 4000;
 
 export function emptyFixState() {
-  return { attempts: 0, sentCi: {}, sentThreads: [], failureCounts: {}, stopped: null };
+  return { attempts: 0, sentCi: {}, sentThreads: [], failureCounts: {}, stopped: null, lastSentAt: 0 };
 }
 
 export function failureSignature(ci) {
@@ -44,13 +44,14 @@ export function decideFix({ pr, result, agent, fix, settings, viewer, enabled })
   return null;
 }
 
-export function recordSend(fix, decision) {
+export function recordSend(fix, decision, now = Date.now()) {
   const next = { ...fix, sentCi: { ...fix.sentCi }, sentThreads: [...fix.sentThreads], failureCounts: { ...fix.failureCounts } };
   if (decision.type === 'stop') {
     next.stopped = decision.reason;
     return next;
   }
   next.attempts += 1;
+  next.lastSentAt = now;
   if (decision.type === 'ci') {
     next.sentCi[decision.key] = true;
     next.failureCounts[decision.signature] = (next.failureCounts[decision.signature] ?? 0) + 1;

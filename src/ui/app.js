@@ -127,7 +127,10 @@ export function createApp({ engine, herdr, gh = defaultGh, output = process.stdo
       case 'right': case 'l': return moveSelection(1, 0);
       case 'enter': return openDetail(card);
       case 'g': return goToAgent(card);
-      case 'a': return engine.toggleAutoFix();
+      case 'a':
+        engine.toggleAutoFix();
+        if (card?.repo && !engine.settingsOf(card.repo).autoFix) say(`auto_fix is off for ${card.repo} in config.toml.`);
+        return undefined;
       case 'R': return card?.url ? engine.refresh(card.url) : undefined;
       case 'q': case 'ctrl-c': return quit();
       default: return undefined;
@@ -296,7 +299,8 @@ export function createApp({ engine, herdr, gh = defaultGh, output = process.stdo
     const { W, H } = size();
     const cards = engine.cards();
     ensureSelection(cards);
-    const model = { ...ui, card: null, cards, status: engine.status(), now: Date.now() };
+    const focused = cards.find((c) => c.key === (ui.cardKey ?? ui.selectedKey));
+    const model = { ...ui, card: null, cards, status: engine.status(focused?.repo), now: Date.now() };
     if (ui.view === 'board') return renderBoard(model, W, H);
     const card = cards.find((c) => c.key === ui.cardKey);
     if (!card?.data) {
