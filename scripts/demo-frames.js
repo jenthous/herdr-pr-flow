@@ -77,28 +77,72 @@ const FRAMES = [
 
 const escapeHtml = (text) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-function segmentHtml(seg) {
-  const styles = [];
-  for (const name of seg.c.split(/\s+/).filter(Boolean)) {
-    if (name === 'B') styles.push('font-weight:700');
-    if (THEME.fg[name]) styles.push(`color:${THEME.fg[name]}`);
-    if (THEME.bg[name]) styles.push(`background:${THEME.bg[name]}`);
-  }
-  return styles.length ? `<span style="${styles.join(';')}">${escapeHtml(seg.t)}</span>` : escapeHtml(seg.t);
+function segmentData(seg) {
+  const names = seg.c.split(/\s+/).filter(Boolean);
+  const fg = names.map((n) => THEME.fg[n]).find(Boolean) ?? THEME.fg.f0;
+  const bg = names.map((n) => THEME.bg[n]).find(Boolean) ?? THEME.bg.bg0;
+  return [seg.t, fg, bg, names.includes('B')];
+}
+
+// Runs in the page. Draws on a fixed cell grid and draws box lines as shapes, the way a
+// terminal does, so lines stay continuous and corners meet. All demo text is one cell wide.
+function drawFrame(rows, cellW, cellH) {
+  const canvas = document.getElementById('screen');
+  const columns = rows[0].reduce((n, seg) => n + seg[0].length, 0);
+  canvas.width = columns * cellW;
+  canvas.height = rows.length * cellH;
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const line = (x1, y1, x2, y2, color, weight) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(Math.min(x1, x2), Math.min(y1, y2), Math.max(Math.abs(x2 - x1), weight), Math.max(Math.abs(y2 - y1), weight));
+  };
+  ctx.textBaseline = 'middle';
+  rows.forEach((row, r) => {
+    let c = 0;
+    for (const [text, fg, bg, bold] of row) {
+      for (const ch of text) {
+        const x = c * cellW;
+        const y = r * cellH;
+        const midX = x + Math.floor(cellW / 2);
+        const midY = y + Math.floor(cellH / 2);
+        ctx.fillStyle = bg;
+        ctx.fillRect(x, y, cellW, cellH);
+        const px = midX + 0.5;
+        const py = midY + 0.5;
+        if (ch === '─') line(x, midY, x + cellW, midY, fg, 1);
+        else if (ch === '━') line(x, midY - 1, x + cellW, midY - 1, fg, 2);
+        else if (ch === '│') line(midX, y, midX, y + cellH, fg, 1);
+        else if (ch === '╭') { ctx.strokeStyle = fg; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px, y + cellH); ctx.lineTo(px, py + 4); ctx.quadraticCurveTo(px, py, px + 4, py); ctx.lineTo(x + cellW, py); ctx.stroke(); }
+        else if (ch === '╮') { ctx.strokeStyle = fg; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, py); ctx.lineTo(px - 4, py); ctx.quadraticCurveTo(px, py, px, py + 4); ctx.lineTo(px, y + cellH); ctx.stroke(); }
+        else if (ch === '╰') { ctx.strokeStyle = fg; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(px, y); ctx.lineTo(px, py - 4); ctx.quadraticCurveTo(px, py, px + 4, py); ctx.lineTo(x + cellW, py); ctx.stroke(); }
+        else if (ch === '╯') { ctx.strokeStyle = fg; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, py); ctx.lineTo(px - 4, py); ctx.quadraticCurveTo(px, py, px, py - 4); ctx.lineTo(px, y); ctx.stroke(); }
+        else if (ch !== ' ') {
+          ctx.fillStyle = fg;
+          ctx.font = `${bold ? 700 : 400} 15px "JetBrains Mono", Menlo, monospace`;
+          ctx.fillText(ch, x, y + cellH / 2 + 1);
+        }
+        c += 1;
+      }
+    }
+  });
+  document.body.dataset.ready = '1';
 }
 
 function page(frame) {
-  const lines = frame.rows.map((row) => `<span class="l">${row.map(segmentHtml).join('')}</span>`).join('');
+  const data = JSON.stringify(frame.rows.map((row) => row.map(segmentData))).replace(/</g, '\\u003c');
   return `<!doctype html><meta charset="utf-8">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap">
 <style>
 html,body{margin:0;background:#141517}
 #shot{display:inline-block;padding:14px 16px 0}
-pre{margin:0;font:400 14px/1.28 "JetBrains Mono",Menlo,monospace;color:${THEME.fg.f0};background:${THEME.bg.bg0};white-space:pre;font-variant-ligatures:none;padding:6px 8px}
-.l{display:block}
+canvas{display:block}
 .cap{font:500 16px/1 "JetBrains Mono",Menlo,monospace;color:#e6e8ec;padding:14px 2px 16px}
 </style>
-<div id="shot"><pre>${lines}</pre><div class="cap">${escapeHtml(frame.caption)}</div></div>`;
+<div id="shot"><canvas id="screen"></canvas><div class="cap">${escapeHtml(frame.caption)}</div></div>
+<script>
+const drawFrame = ${drawFrame.toString()};
+Promise.all([document.fonts.load('400 15px "JetBrains Mono"'), document.fonts.load('700 15px "JetBrains Mono"')]).then(() => drawFrame(${data}, 9, 19));
+</script>`;
 }
 
 const dir = process.argv[2];
