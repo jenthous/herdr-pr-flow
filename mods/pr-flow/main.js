@@ -328,7 +328,7 @@ export default class PrFlow extends View {
       .on_click((_e, cx) => { this.setOrg(org); cx.notify(); })
       .child(div().text_size(11.5).max_w(140).truncate().child(label))
       .child(div().text_size(11).text_color(t.dim).child(String(count)));
-    return h_flex().id("orgs").flex_none().px(10).py(7).gap(4).items_center().border_b(1).border_color(t.border).overflow_x_scrollbar()
+    return h_flex().id("orgs").h(36).flex_none().px(10).gap(4).items_center().border_b(1).border_color(t.border).overflow_x_scrollbar()
       .child(chip("org-all", this.t("org_all"), all.length, on === null, null))
       .children(orgs.map(([org, count]) => chip(`org-${org}`, org, count, on === org, org)));
   }
