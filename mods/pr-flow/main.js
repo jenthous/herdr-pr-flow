@@ -6,7 +6,7 @@ import { agents, panes, spaces, focused, exec, run, theme, props, settings, shar
 import { createGh, parseRemote, runIdFromUrl } from "./gh.js";
 import { createTracker } from "./tracker.js";
 import { translator, relative, effectiveLang } from "./i18n.js";
-import { facts, steps, openThreads, logTail, flowLine, flowRows, jobSteps, issueState, issueLabel, orgsOf, byOrg } from "./present.js";
+import { facts, steps, openThreads, logTail, flowLine, flowRows, jobSteps, issueState, issueLabel, orgsOf, byOrg, reposOf, byRepo } from "./present.js";
 import { parseDiff } from "./diff.js";
 import { parseDuration, sanitize } from "./text.js";
 
@@ -110,6 +110,7 @@ export default class PrFlow extends View {
     this.url = null; // the open PR; null shows the list
     this.selected = 0;
     this.org = localStorage.getItem("org") || null; // the owner the list shows; null: all
+    this.repo = localStorage.getItem("repo") || null; // within it, one repo; null: all of the owner's
     this.logs = new Map(); // run id -> { name, runId, repo, tail, full, failed }
     this.opened = new Set(); // timeline rows showing their steps or checks
     this.issueUrl = null; // the issue open in the panel
@@ -132,7 +133,9 @@ export default class PrFlow extends View {
   command(name, cx) {
     const cards = this.shown(), card = this.url ? this.current() : cards[this.selected];
     // pr-flow.org:<owner> shows one owner's PRs; pr-flow.org alone shows all.
+    // pr-flow.repo:<owner/name> shows one repo (and chooses its owner).
     if (String(name).startsWith("org")) this.setOrg(String(name).split(":")[1] || null);
+    else if (String(name).startsWith("repo")) { const repo = String(name).split(":")[1] || null; if (repo) this.setOrg(repo.split("/")[0]); this.setRepo(repo); }
     else if (name === "next") this.select(Math.min(this.selected + 1, cards.length - 1));
     else if (name === "prev") this.select(this.selected - 1);
     else if (name === "open" && card) this.openPr(card.url, cx);
@@ -307,16 +310,34 @@ export default class PrFlow extends View {
     this.selectedUrl = this.shown()[this.selected]?.url;
   }
 
-  // The list's cards: one owner's when one is chosen and still has PRs, else all.
+  // The list's cards: one owner's when one is chosen and still has PRs, else all; then one repo's
+  // of those the same way.
   shown() {
-    return byOrg(this.tracker.cards(), this.org);
+    const owned = byOrg(this.tracker.cards(), this.org);
+    return this.org ? byRepo(owned, this.repo) : owned;
   }
 
   setOrg(org) {
+    if (org !== this.org) this.setRepo(null);
     this.org = org;
     localStorage.setItem("org", org ?? "");
     this.selected = 0;
     this.selectedUrl = null;
+  }
+
+  setRepo(repo) {
+    this.repo = repo;
+    localStorage.setItem("repo", repo ?? "");
+    this.selected = 0;
+    this.selectedUrl = null;
+  }
+
+  chip(id, label, count, active, onPick, t) {
+    return h_flex().id(id).h(22).flex_none().px(8).gap(5).items_center().rounded(6).cursor_pointer()
+      .bg(active ? t.selected : t.raised).text_color(active ? t.foreground : t.muted).hover((s) => s.bg(t.hover))
+      .on_click((_e, cx) => { onPick(); cx.notify(); })
+      .child(div().text_size(11.5).max_w(140).truncate().child(label))
+      .child(div().text_size(11).text_color(t.dim).child(String(count)));
   }
 
   // One chip per owner under the header, when the list has more than one.
@@ -324,14 +345,21 @@ export default class PrFlow extends View {
     const orgs = orgsOf(all);
     if (orgs.length < 2) return null;
     const on = orgs.some(([o]) => o === this.org) ? this.org : null;
-    const chip = (id, label, count, active, org) => h_flex().id(id).h(22).flex_none().px(8).gap(5).items_center().rounded(6).cursor_pointer()
-      .bg(active ? t.selected : t.raised).text_color(active ? t.foreground : t.muted).hover((s) => s.bg(t.hover))
-      .on_click((_e, cx) => { this.setOrg(org); cx.notify(); })
-      .child(div().text_size(11.5).max_w(140).truncate().child(label))
-      .child(div().text_size(11).text_color(t.dim).child(String(count)));
     return h_flex().id("orgs").h(36).flex_none().px(10).gap(4).items_center().border_b(1).border_color(t.border).overflow_x_scrollbar()
-      .child(chip("org-all", this.t("org_all"), all.length, on === null, null))
-      .children(orgs.map(([org, count]) => chip(`org-${org}`, org, count, on === org, org)));
+      .child(this.chip("org-all", this.t("org_all"), all.length, on === null, () => this.setOrg(null), t))
+      .children(orgs.map(([org, count]) => this.chip(`org-${org}`, org, count, on === org, () => this.setOrg(org), t)));
+  }
+
+  // Under a chosen owner, one chip per repo of theirs, when they have more than one.
+  repoBar(all, t) {
+    if (!this.org) return null;
+    const owned = all.filter((c) => String(c.repo).split("/")[0] === this.org);
+    const repos = reposOf(owned);
+    if (repos.length < 2) return null;
+    const on = repos.some(([r]) => r === this.repo) ? this.repo : null;
+    return h_flex().id("repos").h(32).flex_none().px(10).gap(4).items_center().border_b(1).border_color(t.border).overflow_x_scrollbar()
+      .child(this.chip("repo-all", this.t("repo_all"), owned.length, on === null, () => this.setRepo(null), t))
+      .children(repos.map(([repo, count]) => this.chip(`repo-${repo}`, repo.split("/")[1], count, on === repo, () => this.setRepo(repo), t)));
   }
 
   header(count, t) {
@@ -393,9 +421,10 @@ export default class PrFlow extends View {
     this.selected = kept >= 0 ? kept : Math.min(this.selected, cards.length - 1);
     this.selectedUrl = cards[this.selected].url;
     const error = this.tracker.lastError();
-    const bar = this.orgBar(all, t);
+    const bar = this.orgBar(all, t), repoBar = bar && this.repoBar(all, t);
     return v_flex().size_full().child(this.header(cards.length, t))
       .when(Boolean(bar), (e) => e.child(bar))
+      .when(Boolean(repoBar), (e) => e.child(repoBar))
       .child(v_flex().id("pr-list").flex_1().min_h(0).overflow_y_scrollbar().p(6).gap(2).children(cards.map((c, i) => this.row(c, i, t))))
       .when(Boolean(error), (e) => e.child(div().flex_none().px(14).py(6).border_t(1).border_color(t.border).truncate().text_size(11).text_color(t.ansi1).child(sanitize(error))));
   }

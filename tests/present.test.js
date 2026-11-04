@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { facts, steps, openThreads, logTail, orgsOf, byOrg } from '../mods/pr-flow/present.js';
+import { facts, steps, openThreads, logTail, orgsOf, byOrg, reposOf, byRepo } from '../mods/pr-flow/present.js';
 import { prState } from '../mods/pr-flow/status.js';
 import { translator, relative, effectiveLang } from '../mods/pr-flow/i18n.js';
 
@@ -86,4 +86,13 @@ test('owners are counted most PRs first, and a chosen owner filters the list', (
   assert.equal(byOrg(cards, null).length, 4);
   // An owner whose PRs are all gone shows everything rather than an empty list.
   assert.equal(byOrg(cards, 'gone').length, 4);
+});
+
+test('repos are counted the same way, and a chosen repo filters an owner\'s list', () => {
+  const cards = [{ repo: 'b/x' }, { repo: 'b/z' }, { repo: 'b/x' }, { repo: 'a/y' }];
+  const owned = byOrg(cards, 'b');
+  assert.deepEqual(reposOf(owned), [['b/x', 2], ['b/z', 1]]);
+  assert.deepEqual(byRepo(owned, 'b/z').map((c) => c.repo), ['b/z']);
+  assert.equal(byRepo(owned, null).length, 3);
+  assert.equal(byRepo(owned, 'b/gone').length, 3);
 });
