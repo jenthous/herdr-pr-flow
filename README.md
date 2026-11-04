@@ -2,160 +2,94 @@
 
 **English** | [한국어](README.ko.md)
 
-See every pull request your agents opened and where each one is, without leaving [Herdr](https://herdr.dev).
+A side panel for the [Herdr app](https://herdr.dev) that shows every pull request your agents opened and where each one is, from CI through to the workflows that run after a merge.
 
-![PR Flow: a side panel lists each PR with its CI and review state, next to the agent working on it](docs/demo.gif)
+![PR Flow beside an agent: a PR goes from CI to merged, its deploy workflow runs step by step, then a linked issue and a diff open](docs/demo.gif)
 
-*The terminal plugin's real screens, drawn with sample data.*
+*The real mod in the Herdr app, drawn with made-up projects and data.*
 
 PR Flow only reads. It never writes to GitHub or sends anything to an agent. When something needs doing, jump to the agent and tell it there.
 
-- **No setup.** A PR appears when an agent running in Herdr has one on its branch.
-- **Plain state.** Each row shows what finished and what is happening now, such as `CI ✓ → waiting for review`. A repo with no CI says `no CI`, and never counts as passed.
-- **Details in the panel.** Open a PR to see its progress, agent, changed files, diff, and the failed part of a CI log.
+- **No setup.** A PR appears when an agent running in Herdr has one open on its branch.
+- **Plain facts.** `No CI` and `No review` say so, and never count as passed.
+- **After the merge too.** See which workflow is running and which step it's on, using the names in your own workflow files.
+- **Linked issues.** Read the issue a PR closes without leaving the panel.
 
 ## Contents
 
-- [Two versions](#two-versions)
 - [Status](#status)
 - [Requirements](#requirements)
-- [Terminal plugin](#terminal-plugin)
-- [Desktop app mod](#desktop-app-mod)
-- [Reading a PR's state](#reading-a-prs-state)
+- [Install](#install)
+- [Using it](#using-it)
+- [Reading the states](#reading-the-states)
 - [How PRs are found and refreshed](#how-prs-are-found-and-refreshed)
-- [Configuration](#configuration)
+- [Settings](#settings)
+- [What it runs](#what-it-runs)
 - [Troubleshooting](#troubleshooting)
 - [Limits](#limits)
 - [Development](#development)
 
-## Two versions
-
-| | Terminal plugin | Desktop app mod |
-| --- | --- | --- |
-| Runs in | Herdr (`herdr`), as a pane | Herdr desktop app (`herdr-app`), as a docked panel |
-| Installed with | `herdr plugin install` | Copying a folder into `~/.config/herdr-app/mods/` |
-| Used with | Keyboard | Mouse and keyboard |
-| Progress, agent, files, diff, failed CI log | Yes | Yes |
-| Actions runs after a merge | No | Yes, down to each step |
-| Linked issues | No | Yes |
-| Language | `lang` in `config.toml` | Settings button in the panel |
-
-Use the version that matches the Herdr you run. They don't share state.
-
 ## Status
 
-Early release (0.2.0). It has been run against real pull requests with real Claude Code agents. Other agents such as Codex haven't been tried. The desktop app mod has been run on macOS with `herdr-app` 0.1.12 only.
+Early release (0.3.0). It has been run on macOS with `herdr-app` 0.1.12 against real pull requests and real Claude Code agents. Codex, Linux, Windows and remote machines haven't been tried.
 
 ## Requirements
 
-- [GitHub CLI](https://cli.github.com) logged in (`gh auth status`)
-- For the terminal plugin: Herdr 0.9.3 or later and Node.js 20 or later, on Linux or macOS
-- For the desktop app mod: the Herdr desktop app
+- The Herdr desktop app
+- [GitHub CLI](https://cli.github.com), logged in (`gh auth status`)
 
-## Terminal plugin
+## Install
 
-### Install and open
-
-```sh
-herdr plugin install jjangsky/herdr-pr-flow
-```
-
-Open it from a pane in Herdr, and the panel appears beside that pane. With no pane to sit beside, it opens as a tab.
-
-```sh
-herdr plugin action invoke open --plugin jjangsky.pr-flow
-```
-
-To open it with a key, add this to `~/.config/herdr/config.toml` and run `herdr server reload-config`:
-
-```toml
-[[keys.command]]
-key = "prefix+p"
-type = "plugin_action"
-command = "jjangsky.pr-flow.open"
-description = "PR Flow"
-```
-
-### Walkthrough
-
-The demo above runs for about 24 seconds and follows one failed PR from start to finish. These are the same screens as stills.
-
-**1. Watch the list.** Each PR shows its title, repo and number, and current state. A failed PR gets a red dot. Move with `j` and `k`, and press `enter` to open one.
-
-![The list with four PRs, one of them showing CI failed](docs/images/plugin-list.png)
-
-**2. Open the PR.** You see each step with its time, the agent and what it is doing, and the changed files.
-
-![A PR with its progress, agent, and changed files](docs/images/plugin-detail.png)
-
-**3. Read the failed log.** Press `l`. The log opens at the bottom, where failures usually are.
-
-![The failed part of a CI log](docs/images/plugin-log.png)
-
-**4. Read the changes.** Press `d`, and use `[` `]` to change file.
-
-![A file's diff with added and removed lines](docs/images/plugin-diff.png)
-
-**5. Tell the agent.** Press `enter` to jump to the agent working on the PR, and tell it what to do there. The panel picks up the new state on its own.
-
-### Keys
-
-| Screen | Key | Action |
-| --- | --- | --- |
-| List | `j` `k`, arrows | Move |
-| List | `enter` | Open the PR |
-| List | `g` | Go to the agent |
-| List | `R` | Refresh the selected PR |
-| List | `q`, `ctrl-c` | Close |
-| PR | `enter`, `g` | Go to the agent |
-| PR | `d` | Show changes |
-| PR | `l` | Show the failed CI log, when a check failed |
-| PR | `o` | Open on GitHub |
-| PR | `R` | Refresh |
-| PR | `j` `k`, arrows, `space`, page keys | Scroll |
-| PR | `esc`, `q` | Back |
-| Changes | `[` `]` | Previous or next file |
-| Changes, log | `j` `k`, arrows, `space`, page keys | Scroll |
-| Changes, log | `esc`, `q` | Back |
-
-## Desktop app mod
-
-### Install and open
+Herdr's built-in layouts don't take new panels, so make your own copy of the layout first. Skip that line if you already use a layout of your own.
 
 ```sh
 git clone https://github.com/jjangsky/herdr-pr-flow
-mkdir -p ~/.config/herdr-app/mods
-cp -R herdr-pr-flow/pr-flow/mods/pr-flow ~/.config/herdr-app/mods/
+herdr-app do layout.clone '{"name":"main","as":"main-pr"}'
+cp -R herdr-pr-flow/mods/pr-flow ~/.config/herdr-app/mods/
 herdr-app check ~/.config/herdr-app/mods/pr-flow
 ```
 
-The first time the app sees the folder, it docks the panel on the right, 340 pixels wide. After that your layout decides where it stays. If a folder named `pr-flow` already exists, look at it before copying over it. To remove the mod, delete the folder.
+The panel appears on the right of the window, 340 pixels wide. A copied layout doesn't receive later changes Herdr makes to `main`.
 
-### Walkthrough
+Or ask an agent running in Herdr:
 
-These screenshots come from a real run. The app was set to Korean, and the buttons have the same meaning in English.
+```text
+Read ~/.config/herdr-app/AGENTS.md, then add this mod: github.com/jjangsky/herdr-pr-flow
+```
 
-**1. The list.** Each card shows the PR, its linked issue, CI and review, and the agent. A merged PR shows how its Actions runs went. Use the buttons at the top for settings and refresh.
+To update, copy the folder again. To remove it, press `cmd-shift-l` to go back to your earlier layout, then delete `~/.config/herdr-app/mods/pr-flow` and `~/.config/herdr-app/layouts/main-pr.json`. Your terminals and agents aren't affected.
 
-![A list card for a merged PR whose Smoke Demo run failed](docs/images/app-list.png)
+## Using it
 
-**2. Follow a merge.** Open a PR to see its timeline. After a merge, each Actions run gets its own row while it runs, such as `Upload bundle (1/3)`. A failed run offers its log. Click a run to expand it.
+**1. Watch the list.** Each card shows the PR, its repo and number, its linked issue, CI and review, and the agent working on it. Click a card to open it.
 
-![A PR timeline with a failed Smoke Demo run and a Deploy Demo run in progress](docs/images/app-pr-running.png)
+<img src="docs/images/en/list.png" width="340" alt="A list of four PRs with their CI, review, linked issue and agent">
 
-**3. See each step.** An expanded run lists its jobs and steps. The screen also shows the linked issues and changed files. Click a file to see its diff.
+**2. Follow a merge.** After a merge, the card shows the workflow that's running and the step it's on. If a run fails, the failure comes first.
 
-![A finished Deploy Demo run expanded into its jobs and steps](docs/images/app-pr-steps.png)
+<img src="docs/images/en/merged.png" width="340" alt="A merged PR card showing Deploy Production on step 2 of 5">
 
-**4. Read the issue.** Click a linked issue to read it, with its labels and comments, in the panel. Use the back button to return to the PR.
+**3. Open the PR.** The timeline shows each stage with its time. Every workflow gets its own row. Below it are linked issues, open comments, changed files and the description.
 
-![A linked issue open in the panel](docs/images/app-issue.png)
+<img src="docs/images/en/pr-running.png" width="340" alt="A PR timeline with two workflows running">
 
-**5. Tell the agent.** Click the agent row at the top of the PR, or press `enter`, to jump to its terminal.
+**4. See each step.** Click a workflow to list its jobs and steps. Click `CI passed` to list the checks. A failed run has `Show log`, and `GitHub` opens the run in your browser.
+
+<img src="docs/images/en/pr-steps.png" width="340" alt="A workflow expanded to its steps">
+
+**5. Read the issue.** Click a linked issue to read its labels, body and comments.
+
+<img src="docs/images/en/issue.png" width="340" alt="A linked issue open in the panel">
+
+**6. See the changes.** Click a changed file or a failed log to open it in a pane beside your terminal. Opening another file replaces what the pane shows.
+
+<img src="docs/images/en/diff.png" alt="A file diff in a pane beside the panel">
+
+**7. Tell the agent.** Click the agent row at the top of a PR to jump to its terminal.
 
 ### Keys
 
-The panel takes keys after you click it.
+Click the panel first so it has the keyboard.
 
 | Screen | Key | Action |
 | --- | --- | --- |
@@ -166,120 +100,107 @@ The panel takes keys after you click it.
 | List | `r` | Refresh |
 | PR | `enter`, `g` | Go to the agent |
 | PR | `o` | Open on GitHub |
-| PR | `esc`, `backspace` | Back |
+| PR, issue, settings | `esc`, `backspace` | Back |
 | Issue | `o` | Open on GitHub |
-| Issue | `esc`, `backspace` | Back to the PR |
 
-## Reading a PR's state
+## Reading the states
 
-The terminal plugin shows one state after the arrow. It is the first of these that applies, so the most blocking one wins.
-
-| State | Meaning |
+| Shown | Meaning |
 | --- | --- |
-| `merged` / `closed` | The PR is finished |
-| `draft` | Still marked as a draft |
-| `merge conflict` | GitHub reports a conflict with the base branch |
-| `CI failed` | A check failed |
-| `CI running` | A check is running, or a new commit is still within `ci_wait` |
-| `changes requested` | A reviewer asked for changes |
-| `N open comments` | Review threads that are neither resolved nor outdated |
-| `AI reviewing` | An AI review job is running |
-| `waiting for review` | The repo requires a review that hasn't happened |
-| `behind base` | The branch is behind its base |
-| `blocked by rules` | Branch rules block the merge |
-| `ready to merge` | Nothing above applies |
+| `CI` with a check | Every check passed |
+| `CI running 2/4` | 2 of 4 checks have finished |
+| `CI failed` | At least one check failed |
+| `No CI` | No check reported, even after waiting `ci_wait` for a new commit |
+| `Approved`, `Changes requested`, `Waiting for review` | GitHub's review decision |
+| `AI reviewing`, `Reviewed` | An AI review job is running, or a review exists without a decision |
+| `No review` | Nobody has reviewed it |
+| Comment icon and a number | Review threads still open |
+| `Merge conflict`, `Ready to merge` | What GitHub reports |
+| `Merged → main` | Merged, and into which branch |
+| `Deploy · Build (2/5)` | That workflow's current step |
+| `Deploy · waiting for approval` | The run is waiting for someone to approve it |
+| `2 runs after merge finished` | All of them succeeded |
+| `Issue #5`, `2 issues`, `No issue` | Issues linked to the PR |
 
-`ready to merge` reports what GitHub says. It doesn't judge the change.
+Jobs such as `claude-review` are recognized as AI review by name, so their result isn't reported as a CI failure. Add others with `ai_checks`.
 
-Before the arrow, `CI ✓`, `Review ✓` and `no CI` show what already finished. An AI review job's result isn't counted as CI, so its failure isn't shown as `CI failed`.
+A finished workflow means its job succeeded. It doesn't prove your service is healthy.
+
+### Linking an issue
+
+An issue shows up when GitHub links it to the PR: a keyword such as `Closes #5` in the PR body, or a link set in the PR's sidebar. A plain `#5` isn't a link. Asking your agent to write `Closes #<number>` is enough.
 
 ## How PRs are found and refreshed
 
-PR Flow asks Herdr which agents are running, then looks up the PR for each agent's branch with `gh`. Only read commands are used.
+PR Flow asks GitHub on a timer, so it can lag behind by the times below.
 
-| | Terminal plugin | Desktop app mod |
-| --- | --- | --- |
-| Check agents | Every 3 seconds | Every 5 seconds |
-| Look for a new PR on a branch | Every 30 seconds | Every 30 seconds while the agent works, every 2 minutes when idle |
-| Refresh an open PR | Every `poll_seconds` | Every `poll_seconds` |
-| Refresh a PR with no running agent | 4 times slower | 4 times slower |
-| When an agent stops working | Refreshes its PR now | Looks for and refreshes its PR now |
-| Actions runs after a merge | Not shown | Every 15 seconds while runs are active |
-| Remembered PRs | `tracked.json` in the plugin's state directory | The mod's own storage |
+| What | How often |
+| --- | --- |
+| Agent status | 5 seconds |
+| New PR, working agent | 30 seconds, and right after it finishes |
+| New PR, idle agent | 2 minutes |
+| Open PR with an agent | `poll_seconds` (30 seconds) |
+| Open PR without an agent | 4 × `poll_seconds` (2 minutes) |
+| Workflows after a merge | 15 seconds while running |
 
-## Configuration
+Once found, a PR stays listed after its agent exits or changes branch. A closed PR leaves the list. A merged one leaves 24 hours after the merge, once its workflows have finished.
 
-Both versions work without configuration.
+## Settings
 
-### Terminal plugin
+The settings button at the top of the panel chooses the language: follow the system, 한국어 or English.
 
-Create `config.toml` in the directory printed by `herdr plugin config-dir jjangsky.pr-flow`:
-
-```toml
-poll_seconds = 30
-ci_wait = "2m"
-lang = "ko"
-ai_checks = ["nightly review"]
-```
-
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `poll_seconds` | `30` | How often an open PR refreshes. The minimum is 10 |
-| `ci_wait` | `"2m"` | How long a new commit waits for checks before showing `no CI`. Units are `ms`, `s`, `m` and `h` |
-| `lang` | System language | `"en"` or `"ko"` |
-| `ai_checks` | `[]` | CI jobs that are really AI review, by exact name |
-
-Jobs such as `claude-review` are recognized as AI review by name. Add others to `ai_checks`.
-
-The file supports only top-level `key = value` lines and `#` comments.
-
-### Desktop app mod
-
-Choose the language with the settings button in the panel. The other values go in the mod's `props`, in your layout file under `~/.config/herdr-app/layouts/`:
+Everything else goes in the block's `props` in your layout file (`~/.config/herdr-app/layouts/main-pr.json`):
 
 ```json
-{
-  "type": "block",
-  "content": {
-    "mod": "pr-flow",
-    "props": { "poll_seconds": 60, "ci_wait": "5m", "ai_checks": ["nightly review"] }
-  },
-  "size": { "px": 340 }
-}
+{ "type": "block", "content": { "mod": "pr-flow", "props": { "poll_seconds": 60, "ci_wait": "5m", "ai_checks": ["nightly review"] } } }
 ```
+
+| Prop | Default | Meaning |
+| --- | --- | --- |
+| `poll_seconds` | `30` | How often an open PR refreshes. The minimum is 10 |
+| `ci_wait` | `"2m"` | How long a new commit waits for checks before showing `No CI` |
+| `ai_checks` | `[]` | CI jobs that are really AI review |
+| `lang` | system | `"en"` or `"ko"`, used until you choose in settings |
+
+## What it runs
+
+This is what the mod does on your machine, all with your own login. It stores no credentials.
+
+- `gh pr list`, `gh pr view`, `gh pr diff`, `gh issue view`, `gh run view` and read-only `gh api` calls
+- `git remote get-url origin` in each agent's folder
+- `sh` to read your language, and `defaults` on macOS when the app has no `LANG`
+- `open`, `xdg-open` or `explorer.exe` to open a link
 
 ## Troubleshooting
 
 | What you see | What to do |
 | --- | --- |
-| A PR doesn't appear | Check that an agent is running in Herdr on that branch, and that `gh pr list --head <branch>` finds an open PR from that folder |
-| `Cannot read line N of config.toml` | Fix that line. Strings need double quotes, and tables such as `[section]` aren't supported |
-| `gh:` error in the list header, or `GitHub CLI is not ready` | Run `gh auth login`, then refresh |
-| `no CI` on a repo that has CI | The checks didn't report within `ci_wait`. Raise it |
-| An AI review shows as `CI failed` | Add the job's exact name to `ai_checks` |
-| `No failed log` or only a link | Logs load for GitHub Actions only. Other CI shows a link |
-| The mod doesn't appear | Run `herdr-app check ~/.config/herdr-app/mods/pr-flow` and `herdr-app status`. Both report load errors |
+| No panel after installing | The built-in `main` layout doesn't take new panels. Run the `layout.clone` line, then copy the folder again under a fresh start: remove `mods/pr-flow`, then copy it |
+| `GitHub CLI is not ready` | Run `gh auth login`, then refresh |
+| A PR is missing | Check that an agent is running on that branch, the PR is open, and the folder's `origin` is on GitHub |
+| A linked issue is missing | Use `Closes #5` in the PR body. A plain `#5` isn't a link |
+| No workflows after a merge | The repo has no GitHub Actions run on the merge commit. Other deploy systems aren't shown |
+| `Could not load the log` | Very large logs can pass the app's 30 second and 8 MiB limit. Open it on GitHub |
 
 ## Limits
 
-- PRs are found through agents running in Herdr, and only while they are open. A PR merged or closed before PR Flow saw it isn't added. A PR already listed stays after its agent exits, until it closes or 24 hours after it merges.
-- Only CI that reports to GitHub is visible.
-- PR Flow needs to be open to refresh, and a repo must be hosted on GitHub.
-- Each refresh runs `gh`, so many open PRs use more of your GitHub API limit. Raise `poll_seconds` if needed.
+- PRs are found through agents running in Herdr. PRs you opened elsewhere, or that only ask for your review, aren't listed.
+- The refresh button updates listed PRs. It doesn't look for new ones, which arrive on the timer above.
+- Step-by-step tracking is for GitHub Actions after a merge. Before a merge you see each check's name and result. Deploys outside Actions, such as Vercel, aren't shown.
+- A flow across two PRs, such as `development` then `live`, shows as two separate PRs.
+- After a merge, a listed issue's state isn't refreshed. Opening the issue always loads it fresh.
+- Herdr must be running for the panel to refresh. The repo must be on GitHub, and the remote must be called `origin`.
+- It polls while the panel is hidden too, so many PRs use more of your GitHub API limit. Raise `poll_seconds` if needed.
 
 ## Development
 
 ```sh
-npm test                                      # both versions
-herdr plugin link "$PWD"                      # run the terminal plugin from this folder
-node bin/board.js --dump --plain --pr <url>   # a snapshot of a real PR
-node scripts/demo-frames.js <dir>             # README demo frames as HTML
-herdr-app check pr-flow/mods/pr-flow          # load the mod once and report errors
+npm test                                       # needs Node.js 20 or later
+herdr-app check "$PWD/mods/pr-flow"
+python3 scripts/demo/capture.py /tmp/prdemo en out   # redraws the README's screens with made-up data
 ```
 
-The terminal plugin is in `bin/` and `src/`. The desktop app mod is in `pr-flow/mods/pr-flow/`, and its tests are in `tests/mod/`.
-
-`scripts/demo-frames.js` only writes the HTML frames. Rendering them into `docs/demo.gif` is a separate step. The stills in `docs/images/plugin-*.png` are frames from that GIF, so update them together.
+The mod is plain JavaScript with no dependencies. Only `main.js` touches the app, so the rest runs under Node in tests. `RECIPE.md` is the brief for rebuilding it. `capture.py` needs Pillow, and opens a separate Herdr window for about a minute.
 
 ## License
 
