@@ -1,33 +1,34 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseConfig, settingsFor } from '../src/config.js';
+import { parseConfig, settingsFrom } from '../src/config.js';
 
 test('defaults apply with an empty config', () => {
-  const s = settingsFor(parseConfig(''), 'acme/shop');
-  assert.equal(s.autoFix, true);
-  assert.equal(s.maxFixes, 3);
+  const s = settingsFrom({}, {});
+  assert.equal(s.pollMs, 30000);
   assert.equal(s.ciWaitMs, 120000);
-  assert.equal(s.aiWaitMs, 600000);
-  assert.deepEqual(s.aiReviewers, []);
+  assert.equal(s.lang, 'en');
 });
 
-test('repo sections override global values, case-insensitively', () => {
-  const config = parseConfig(`
-# comment
-auto_fix = false
-ci_wait = "5m"
+test('reads values and comments', () => {
+  const s = settingsFrom(parseConfig('# note\nci_wait = "5m"\nai_checks = ["My Bot"]\nlang = "ko"  # korean'), {});
+  assert.equal(s.ciWaitMs, 300000);
+  assert.deepEqual(s.aiChecks, ['my bot']);
+  assert.equal(s.lang, 'ko');
+});
 
-[repo."Acme/Shop"]
-auto_fix = true
-run = "pnpm dev"
-ai_reviewers = ["CodeRabbitAI", "my-bot"]
-`);
-  const repo = settingsFor(config, 'acme/shop');
-  assert.equal(repo.autoFix, true);
-  assert.equal(repo.run, 'pnpm dev');
-  assert.equal(repo.ciWaitMs, 300000);
-  assert.deepEqual(repo.aiReviewers, ['coderabbitai', 'my-bot']);
-  assert.equal(settingsFor(config, 'acme/other').autoFix, false);
+test('a comment after a value may contain quotes and brackets', () => {
+  const s = parseConfig('ci_wait = "2m"  # before showing "no CI"\nlang = "ko" # "en" or "ko"\nai_checks = ["a"] # see ["b"]');
+  assert.deepEqual(s, { ci_wait: '2m', lang: 'ko', ai_checks: ['a'] });
+});
+
+test('a # inside a string is part of the value', () => {
+  assert.deepEqual(parseConfig('ai_checks = ["review #1", "say \\"#2\\""] # note'), { ai_checks: ['review #1', 'say "#2"'] });
+});
+
+test('language follows the locale unless set', () => {
+  assert.equal(settingsFrom({}, { LANG: 'ko_KR.UTF-8' }).lang, 'ko');
+  assert.equal(settingsFrom({}, { LANG: 'en_US.UTF-8' }).lang, 'en');
+  assert.equal(settingsFrom({ lang: 'en' }, { LANG: 'ko_KR.UTF-8' }).lang, 'en');
 });
 
 test('malformed lines report where the problem is', () => {
@@ -36,5 +37,5 @@ test('malformed lines report where the problem is', () => {
 });
 
 test('poll interval cannot go below the rate-limit floor', () => {
-  assert.equal(settingsFor(parseConfig('poll_seconds = 1'), 'a/b').pollMs, 10000);
+  assert.equal(settingsFrom({ poll_seconds: 1 }, {}).pollMs, 10000);
 });

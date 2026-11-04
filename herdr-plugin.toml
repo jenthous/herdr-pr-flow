@@ -1,14 +1,14 @@
 id = "jjangsky.pr-flow"
 name = "PR Flow"
-version = "0.1.0"
+version = "0.2.0"
 min_herdr_version = "0.9.3"
-description = "Track every PR your agents open, fix CI and AI review automatically, verify and merge without opening GitHub."
+description = "See every PR your agents opened and where each one is, in a side panel."
 platforms = ["linux", "macos"]
 
 [[panes]]
 id = "board"
 title = "PR Flow"
-placement = "tab"
+placement = "split"
 command = ["node", "bin/board.js"]
 
 [[actions]]
@@ -16,15 +16,3 @@ id = "open"
 title = "Open PR Flow"
 contexts = ["workspace"]
 command = ["node", "bin/open.js"]
-
-[[actions]]
-id = "open-pr"
-title = "Open pull request in PR Flow"
-contexts = ["workspace"]
-command = ["node", "bin/open.js"]
-
-[[link_handlers]]
-id = "github-pr"
-title = "Open in PR Flow"
-pattern = "^https://github\\.com/[^/]+/[^/]+/pull/[0-9]+"
-action = "open-pr"

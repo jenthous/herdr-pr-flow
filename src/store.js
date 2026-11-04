@@ -1,12 +1,13 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+// Remembers which PRs were seen, so they stay listed after their agent exits.
 export function createStore(dir) {
-  const path = dir ? join(dir, 'state.json') : '';
-  let data = { tracked: {}, autoFixEnabled: true };
+  const path = dir ? join(dir, 'tracked.json') : '';
+  let data = { tracked: {} };
   if (path && existsSync(path)) {
     try {
-      data = { ...data, ...JSON.parse(readFileSync(path, 'utf8')) };
+      data = { tracked: {}, ...JSON.parse(readFileSync(path, 'utf8')) };
     } catch {
       renameSync(path, `${path}.bad`);
     }
@@ -21,41 +22,4 @@ export function createStore(dir) {
       renameSync(tmp, path);
     },
   };
-}
-
-function alive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error.code === 'EPERM';
-  }
-}
-
-// Only one board may send prompts and notifications. Other boards stay view-only.
-export function acquireLock(dir) {
-  if (!dir) return { held: true, release() {} };
-  mkdirSync(dir, { recursive: true });
-  const path = join(dir, 'engine.lock');
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      writeFileSync(path, String(process.pid), { flag: 'wx' });
-      return {
-        held: true,
-        release() {
-          try {
-            unlinkSync(path);
-          } catch {
-            /* already gone */
-          }
-        },
-      };
-    } catch (error) {
-      if (error.code !== 'EEXIST') throw error;
-      const owner = Number(readFileSync(path, 'utf8'));
-      if (owner && alive(owner)) return { held: false, release() {} };
-      unlinkSync(path);
-    }
-  }
-  return { held: false, release() {} };
 }

@@ -1,117 +1,100 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { settingsFrom } from '../src/config.js';
+import { prState } from '../src/status.js';
 import { createApp, parseKeys } from '../src/ui/app.js';
-import { classify } from '../src/classify.js';
-import { parseConfig, settingsFor } from '../src/config.js';
-import { emptyFixState } from '../src/autofix.js';
 
-const settings = settingsFor(parseConfig(''), 'a/b');
+const settings = settingsFrom({}, {});
 
-function setup({ dryRun = false, mergeError = null } = {}) {
-  const pr = { number: 7, title: 't', body: '## Test plan\n- [ ] one\n- [ ] two', url: 'u', state: 'OPEN', author: { login: 'me' }, headRefName: 'fix', headRefOid: 'pinnedsha', baseRefName: 'main', statusCheckRollup: [], latestReviews: [], reviewRequests: [], mergeable: 'MERGEABLE', mergeStateStatus: 'CLEAN', reviewDecision: '' };
-  const result = classify(pr, { now: 1e9, headSeenAt: 0, threads: [] }, settings);
-  const entry = { fix: emptyFixState(), checked: {}, cwd: '/w', repo: 'a/b' };
-  const data = { pr, threads: [], comments: [], repoInfo: { methods: ['squash', 'rebase'], defaultMethod: 'squash' } };
-  const card = { key: 'u', url: 'u', entry, data, result, column: 'you', tone: 'warn', headline: 'x', number: 7, repo: 'a/b', agent: { pane_id: 'p1', agent: 'claude', agent_status: 'idle' } };
-  const calls = { merges: [], prompts: [], comments: [], closes: [] };
+function setup({ agent = true } = {}) {
+  const mk = (number, over = {}) => {
+    const pr = { number, title: `PR ${number}`, url: `u${number}`, state: 'OPEN', headRefName: 'b', baseRefName: 'main', statusCheckRollup: [{ name: 'unit', status: 'COMPLETED', conclusion: 'FAILURE', detailsUrl: 'https://github.com/a/b/actions/runs/9/job/1' }], latestReviews: [], files: [], ...over };
+    return { key: `u${number}`, url: `u${number}`, repo: 'a/b', number, pr, status: prState(pr, { now: 1e9, headSeenAt: 0, threads: [] }, settings), agent: agent ? { pane_id: 'p1', agent: 'claude', agent_status: 'idle' } : null };
+  };
+  const cards = [mk(1), mk(2)];
+  const calls = { focus: [], logs: [], diffs: [], web: [], refresh: [] };
   const gh = {
-    fetchDiff: async () => '',
-    merge: async (...args) => {
-      if (mergeError) throw new Error(mergeError);
-      calls.merges.push(args);
-      pr.headRefOid = 'after';
-    },
-    comment: async (_url, body) => calls.comments.push(body),
-    close: async (url) => calls.closes.push(url),
+    fetchDiff: async (url) => { calls.diffs.push(url); return 'diff --git a/x b/x\n@@ -1 +1 @@\n-a\n+b\ndiff --git a/y b/y\n@@ -1 +1 @@\n-c\n+d\n'; },
+    failedLog: async (repo, id) => { calls.logs.push([repo, id]); return 'boom'; },
+    openInBrowser: async (url) => { calls.web.push(url); },
   };
-  const herdr = { prompt: async (pane, text) => calls.prompts.push({ pane, text }), focus: async () => {} };
-  const engine = {
-    cards: () => [card], refresh: async () => {}, stop() {}, status: () => ({}), settingsOf: () => settings, save() {}, subscribe() {}, logsFor: async () => '', toggleAutoFix() {}, resetFix() {},
-  };
-  const output = { columns: 120, rows: 30, write() {}, on() {} };
-  const app = createApp({ engine, herdr, gh, output, dryRun });
-  return { app, calls, card, pr };
+  const herdr = { focus: async (p) => calls.focus.push(p) };
+  const engine = { cards: () => cards, status: () => ({ lastError: '', lastSync: 0 }), refresh: async (u) => calls.refresh.push(u), stop() {}, subscribe() {} };
+  const app = createApp({ engine, herdr, gh, lang: 'en', output: { columns: 60, rows: 24, write() {}, on() {} } });
+  return { app, calls, cards };
 }
 
 async function press(app, ...keys) {
-  for (const key of keys) await app.handle(key);
+  for (const key of keys) {
+    await app.handle(key);
+    app.frame();
+  }
 }
 
-test('parseKeys understands arrows, enter, escape and Korean text', () => {
+test('parseKeys understands arrows, enter and escape', () => {
   assert.deepEqual(parseKeys('\u001b[Aj\r'), ['up', 'j', 'enter']);
   assert.deepEqual(parseKeys('\u001b'), ['esc']);
-  assert.deepEqual(parseKeys('한글'), ['한', '글']);
-  assert.deepEqual(parseKeys('\u007f\t'), ['backspace', 'tab']);
 });
 
-test('merge uses the commit pinned when the dialog opened, even after a new push', async () => {
-  const { app, calls, pr } = setup();
+test('the list moves within bounds and opens details', async () => {
+  const { app } = setup();
   app.frame();
-  await press(app, 'enter', 'm');
-  assert.equal(app.ui.view, 'merge');
-  pr.headRefOid = 'newpush';
-  await press(app, 'y');
-  assert.deepEqual(calls.merges, [['u', 'squash', 'pinnedsha']]);
-  assert.equal(app.ui.view, 'board');
-});
-
-test('merge only runs on y; n cancels and tab changes the method', async () => {
-  const { app, calls } = setup();
-  app.frame();
-  await press(app, 'enter', 'm', 'enter', 'x', 'tab');
-  assert.equal(app.ui.merge.method, 'rebase');
-  assert.equal(calls.merges.length, 0);
-  await press(app, 'n');
+  await press(app, 'k');
+  assert.equal(app.ui.selectedKey, 'u1');
+  await press(app, 'j', 'j', 'j');
+  assert.equal(app.ui.selectedKey, 'u2');
+  await press(app, 'enter');
   assert.equal(app.ui.view, 'detail');
-  assert.equal(calls.merges.length, 0);
+  assert.equal(app.ui.cardKey, 'u2');
+  await press(app, 'esc');
+  assert.equal(app.ui.view, 'list');
 });
 
-test('a refused merge stays open and shows why', async () => {
-  const { app } = setup({ mergeError: 'Head branch was modified' });
-  app.frame();
-  await press(app, 'enter', 'm', 'y');
-  assert.equal(app.ui.view, 'merge');
-  assert.match(app.ui.merge.error, /Not merged: Head branch was modified/);
-  assert.equal(app.ui.merge.running, false);
-});
-
-test('dry run blocks merge, comment and agent prompts', async () => {
-  const { app, calls } = setup({ dryRun: true });
-  app.frame();
-  await press(app, 'enter', 'm', 'y');
-  assert.equal(calls.merges.length, 0);
-  assert.match(app.ui.merge.error, /Dry run/);
-  await press(app, 'n', 'a', 'c', 'h', 'i', 'enter', 'f', 'h', 'i', 'enter');
-  assert.equal(calls.comments.length, 0);
-  assert.equal(calls.prompts.length, 0);
-});
-
-test('typing into an input does not trigger shortcuts, and esc discards it', async () => {
+test('enter in details and g in the list go to the agent', async () => {
   const { app, calls } = setup();
   app.frame();
-  await press(app, 'enter', 'c', 'm', 'y', 'esc');
+  await press(app, 'g', 'enter', 'enter');
+  assert.deepEqual(calls.focus, ['p1', 'p1']);
+});
+
+test('no agent shows a message instead of failing', async () => {
+  const { app, calls } = setup({ agent: false });
+  app.frame();
+  await press(app, 'g');
+  assert.deepEqual(calls.focus, []);
+  assert.match(app.ui.message, /No agent/);
+});
+
+test('d shows the diff and moves between files', async () => {
+  const { app, calls } = setup();
+  app.frame();
+  await press(app, 'enter', 'd');
+  assert.equal(app.ui.view, 'diff');
+  assert.equal(app.ui.files.length, 2);
+  await press(app, ']', ']');
+  assert.equal(app.ui.fileIndex, 1);
+  await press(app, '[', '[');
+  assert.equal(app.ui.fileIndex, 0);
+  await press(app, 'esc');
   assert.equal(app.ui.view, 'detail');
-  assert.equal(calls.comments.length, 0);
-  await press(app, 'c', '한', '글', 'backspace', 'enter');
-  assert.deepEqual(calls.comments, ['한']);
+  assert.deepEqual(calls.diffs, ['u1']);
 });
 
-test('closing a PR requires typing close', async () => {
+test('l loads the failed log by run id', async () => {
   const { app, calls } = setup();
   app.frame();
-  await press(app, 'enter', 'x', 'y', 'enter');
-  assert.equal(calls.closes.length, 0);
-  await press(app, 'x', 'c', 'l', 'o', 's', 'e', 'enter');
-  assert.equal(calls.closes.length, 1);
+  await press(app, 'enter', 'l');
+  assert.equal(app.ui.view, 'log');
+  assert.deepEqual(calls.logs, [['a/b', '9']]);
+  assert.equal(app.ui.log, 'boom');
 });
 
-test('test plan checks are tied to the commit', async () => {
-  const { app, card, pr } = setup();
+test('no key writes anything: other letters do nothing on any screen', async () => {
+  const { app, calls } = setup();
   app.frame();
-  await press(app, 'enter', 't');
-  assert.deepEqual(card.entry.checked.pinnedsha, [0]);
-  pr.headRefOid = 'next';
-  await press(app, 't');
-  assert.deepEqual(Object.keys(card.entry.checked), ['next']);
-  assert.deepEqual(card.entry.checked.next, [0]);
+  for (const key of ['m', 'y', 'c', 'f', 'a', 'x', 'A', 'C', 'u', 't', 'z', 'r']) await press(app, key);
+  await press(app, 'enter');
+  for (const key of ['m', 'y', 'c', 'f', 'a', 'x', 'A', 'C', 'u', 't', 'z', 'r']) await press(app, key);
+  assert.equal(app.ui.view, 'detail');
+  assert.deepEqual(calls.focus, []);
 });
