@@ -156,3 +156,17 @@ export function issueLabel(card, t) {
   if (!issues.length) return t('issue_none');
   return issues.length === 1 ? t('issue_one', issues[0].number) : t('issue_many', issues.length);
 }
+
+// The owners (users or organizations) in the list, most PRs first: [[owner, count]].
+export function orgsOf(cards) {
+  const counts = new Map();
+  for (const c of cards) { const owner = String(c.repo).split('/')[0]; counts.set(owner, (counts.get(owner) ?? 0) + 1); }
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+
+// The cards of one owner; all of them when `org` is null or has none left.
+export function byOrg(cards, org) {
+  if (!org) return cards;
+  const mine = cards.filter((c) => String(c.repo).split('/')[0] === org);
+  return mine.length ? mine : cards;
+}

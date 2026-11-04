@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { facts, steps, openThreads, logTail } from '../mods/pr-flow/present.js';
+import { facts, steps, openThreads, logTail, orgsOf, byOrg } from '../mods/pr-flow/present.js';
 import { prState } from '../mods/pr-flow/status.js';
 import { translator, relative, effectiveLang } from '../mods/pr-flow/i18n.js';
 
@@ -77,4 +77,13 @@ test('a language chosen in settings beats the system, and auto follows it', () =
   assert.equal(effectiveLang('auto', 'ko'), 'ko');
   assert.equal(effectiveLang(undefined, 'en'), 'en');
   assert.equal(effectiveLang('fr', 'fr'), 'en');
+});
+
+test('owners are counted most PRs first, and a chosen owner filters the list', () => {
+  const cards = [{ repo: 'b/x' }, { repo: 'a/y' }, { repo: 'b/z' }, { repo: 'c/w' }];
+  assert.deepEqual(orgsOf(cards), [['b', 2], ['a', 1], ['c', 1]]);
+  assert.deepEqual(byOrg(cards, 'b').map((c) => c.repo), ['b/x', 'b/z']);
+  assert.equal(byOrg(cards, null).length, 4);
+  // An owner whose PRs are all gone shows everything rather than an empty list.
+  assert.equal(byOrg(cards, 'gone').length, 4);
 });

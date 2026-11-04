@@ -6,7 +6,7 @@ import { agents, panes, spaces, focused, exec, run, theme, props, settings, shar
 import { createGh, parseRemote, runIdFromUrl } from "./gh.js";
 import { createTracker } from "./tracker.js";
 import { translator, relative, effectiveLang } from "./i18n.js";
-import { facts, steps, openThreads, logTail, flowLine, flowRows, jobSteps, issueState, issueLabel } from "./present.js";
+import { facts, steps, openThreads, logTail, flowLine, flowRows, jobSteps, issueState, issueLabel, orgsOf, byOrg } from "./present.js";
 import { parseDiff } from "./diff.js";
 import { parseDuration, sanitize } from "./text.js";
 
@@ -109,6 +109,7 @@ export default class PrFlow extends View {
     });
     this.url = null; // the open PR; null shows the list
     this.selected = 0;
+    this.org = localStorage.getItem("org") || null; // the owner the list shows; null: all
     this.logs = new Map(); // run id -> { name, runId, repo, tail, full, failed }
     this.opened = new Set(); // timeline rows showing their steps or checks
     this.issueUrl = null; // the issue open in the panel
@@ -129,8 +130,10 @@ export default class PrFlow extends View {
   }
 
   command(name, cx) {
-    const cards = this.tracker.cards(), card = this.url ? this.current() : cards[this.selected];
-    if (name === "next") this.select(Math.min(this.selected + 1, cards.length - 1));
+    const cards = this.shown(), card = this.url ? this.current() : cards[this.selected];
+    // pr-flow.org:<owner> shows one owner's PRs; pr-flow.org alone shows all.
+    if (String(name).startsWith("org")) this.setOrg(String(name).split(":")[1] || null);
+    else if (name === "next") this.select(Math.min(this.selected + 1, cards.length - 1));
     else if (name === "prev") this.select(this.selected - 1);
     else if (name === "open" && card) this.openPr(card.url, cx);
     else if (name === "back") this.back(cx);
@@ -272,7 +275,7 @@ export default class PrFlow extends View {
   }
 
   onKey(e, cx) {
-    const cards = this.tracker.cards();
+    const cards = this.shown();
     if (this.settingsOpen) {
       if (e.key !== "escape" && e.key !== "backspace") return;
       this.settingsOpen = false;
@@ -301,7 +304,34 @@ export default class PrFlow extends View {
 
   select(index) {
     this.selected = Math.max(0, index);
-    this.selectedUrl = this.tracker.cards()[this.selected]?.url;
+    this.selectedUrl = this.shown()[this.selected]?.url;
+  }
+
+  // The list's cards: one owner's when one is chosen and still has PRs, else all.
+  shown() {
+    return byOrg(this.tracker.cards(), this.org);
+  }
+
+  setOrg(org) {
+    this.org = org;
+    localStorage.setItem("org", org ?? "");
+    this.selected = 0;
+    this.selectedUrl = null;
+  }
+
+  // One chip per owner under the header, when the list has more than one.
+  orgBar(all, t) {
+    const orgs = orgsOf(all);
+    if (orgs.length < 2) return null;
+    const on = orgs.some(([o]) => o === this.org) ? this.org : null;
+    const chip = (id, label, count, active, org) => h_flex().id(id).h(22).flex_none().px(8).gap(5).items_center().rounded(6).cursor_pointer()
+      .bg(active ? t.selected : t.raised).text_color(active ? t.foreground : t.muted).hover((s) => s.bg(t.hover))
+      .on_click((_e, cx) => { this.setOrg(org); cx.notify(); })
+      .child(div().text_size(11.5).max_w(140).truncate().child(label))
+      .child(div().text_size(11).text_color(t.dim).child(String(count)));
+    return h_flex().id("orgs").h(36).flex_none().px(10).gap(4).items_center().border_b(1).border_color(t.border).overflow_x_scrollbar()
+      .child(chip("org-all", this.t("org_all"), all.length, on === null, null))
+      .children(orgs.map(([org, count]) => chip(`org-${org}`, org, count, on === org, org)));
   }
 
   header(count, t) {
@@ -349,7 +379,7 @@ export default class PrFlow extends View {
   }
 
   list(t) {
-    const tr = this.t, cards = this.tracker.cards();
+    const tr = this.t, all = this.tracker.cards(), cards = this.shown();
     if (!cards.length) {
       const noGh = !this.ghReady;
       return v_flex().size_full().child(this.header(0, t))
@@ -363,7 +393,9 @@ export default class PrFlow extends View {
     this.selected = kept >= 0 ? kept : Math.min(this.selected, cards.length - 1);
     this.selectedUrl = cards[this.selected].url;
     const error = this.tracker.lastError();
+    const bar = this.orgBar(all, t);
     return v_flex().size_full().child(this.header(cards.length, t))
+      .when(Boolean(bar), (e) => e.child(bar))
       .child(v_flex().id("pr-list").flex_1().min_h(0).overflow_y_scrollbar().p(6).gap(2).children(cards.map((c, i) => this.row(c, i, t))))
       .when(Boolean(error), (e) => e.child(div().flex_none().px(14).py(6).border_t(1).border_color(t.border).truncate().text_size(11).text_color(t.ansi1).child(sanitize(error))));
   }
