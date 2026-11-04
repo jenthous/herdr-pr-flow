@@ -10,7 +10,7 @@
 
 *실제 모드를 Herdr 앱에서 실행한 화면입니다. 프로젝트와 데이터는 샘플입니다.*
 
-PR Flow는 조회만 합니다. GitHub에 아무것도 쓰지 않고 에이전트에게 아무것도 보내지 않습니다. 할 일이 있으면 그 에이전트로 이동해서 직접 말하면 됩니다.
+PR Flow는 머지 버튼(`merge`, 기본은 꺼짐)을 켜지 않는 한 조회만 합니다. 에이전트에게는 아무것도 보내지 않습니다. 할 일이 있으면 그 에이전트로 이동해서 직접 말하면 됩니다.
 
 - **설정 없음:** Herdr에서 돌아가는 에이전트의 브랜치에 열린 PR이 있으면 자동으로 나타납니다.
 - **있는 그대로의 상태:** `CI 없음`, `리뷰 없음`은 없다고 표시하고, 통과로 치지 않습니다.
@@ -86,6 +86,8 @@ Read ~/.config/herdr-app/AGENTS.md, then add this mod: github.com/jjangsky/herdr
 **6. 변경 내용 보기:** 변경 파일이나 실패 로그를 누르면 터미널 옆 pane에 열립니다. 다른 파일을 누르면 그 pane의 내용이 바뀝니다.
 
 <img src="docs/images/ko/diff.png" alt="패널 옆 pane에 열린 파일 diff">
+
+**머지 (선택):** `merge`를 설정하면 머지 가능한 PR의 브랜치 아래에 `머지 (squash)` 버튼이 생깁니다. 처음 누르면 4초 동안 `한 번 더 누르면 머지`로 바뀌고, 다시 누르면 머지합니다. 보고 있던 커밋만 머지하므로, 그 사이에 새 커밋이 올라왔으면 GitHub가 거절하고 패널에 이유가 나옵니다.
 
 **7. 에이전트에게 말하기:** PR 위쪽의 에이전트 줄을 누르면 그 터미널로 이동합니다.
 
@@ -164,6 +166,7 @@ PR Flow는 일정 주기로 GitHub에 물어봅니다. 그래서 아래 시간�
 | `ci_wait` | `"2m"` | 새 커밋 후 체크를 기다렸다가 `CI 없음`으로 표시하기까지의 시간 |
 | `ai_checks` | `[]` | 실제로는 AI 리뷰인 CI 작업 |
 | `mine` | `false` | 에이전트가 있든 없든, 내가 올린 열린 PR도 모두 보여줌 |
+| `merge` | 없음 | `"squash"`, `"merge"`, `"rebase"` 중 하나: 머지 가능한 PR에 그 방식의 머지 버튼을 보여줌. 없으면 GitHub에 아무것도 쓰지 않음 |
 | `lang` | 시스템 언어 | `"en"` 또는 `"ko"`. 설정에서 고르기 전까지 적용 |
 
 ## 실행하는 명령
@@ -171,6 +174,7 @@ PR Flow는 일정 주기로 GitHub에 물어봅니다. 그래서 아래 시간�
 이 모드가 PC에서 실행하는 명령입니다. 모두 사용자의 로그인으로 실행하고, 인증 정보는 저장하지 않습니다.
 
 - `gh pr list`, `gh search prs --author @me` (`mine`일 때), `gh pr view`, `gh pr diff`, `gh issue view`, `gh run view`, 읽기 전용 `gh api` 호출
+- `merge`를 켜고 버튼을 두 번 눌렀을 때: `gh pr merge <url> --<방식> --match-head-commit <sha>`. `--admin`도 브랜치 삭제도 하지 않음
 - 각 에이전트 폴더에서 `git remote get-url origin`
 - 언어를 읽는 `sh`, 앱에 `LANG`이 없을 때 macOS의 `defaults`
 - 링크를 여는 `open`, `xdg-open`, `explorer.exe`

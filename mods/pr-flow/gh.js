@@ -1,4 +1,5 @@
-// Every call here only reads. PR Flow never writes to GitHub.
+// Every call here only reads, except `merge`, which runs only when the `merge` prop is set and you
+// press the button twice.
 // `exec` is the app's: (command, args, options) => Promise<{code, stdout, stderr}>.
 const PR_FIELDS = [
   'number', 'title', 'body', 'url', 'state', 'isDraft', 'headRefName', 'headRefOid', 'baseRefName',
@@ -11,6 +12,8 @@ const THREADS_QUERY = `query($owner:String!,$name:String!,$number:Int!){reposito
   commits(last:1){nodes{commit{committedDate}}}
   closingIssuesReferences(first:10){nodes{number title state stateReason url repository{nameWithOwner}}}
 }}}`;
+
+export const MERGE_METHODS = ['squash', 'merge', 'rebase'];
 
 export function parsePrUrl(url) {
   const m = /^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)/.exec(String(url));
@@ -65,6 +68,11 @@ export function createGh(exec) {
     fetchIssue: (url) => json(['issue', 'view', url, '--json', 'number,title,state,stateReason,body,author,labels,comments,url,createdAt']),
     fetchDiff: (url) => run(['pr', 'diff', url, '--color', 'never']),
     failedLog: async (repo, runId) => cleanRunLog(await run(['run', 'view', runId, '-R', repo, '--log-failed'])),
+    // Merges exactly the commit that was shown: if something was pushed since, gh refuses.
+    merge: async (url, method, headSha) => {
+      if (!MERGE_METHODS.includes(method)) throw new Error(`unknown merge method: ${method}`);
+      await run(['pr', 'merge', url, `--${method}`, '--match-head-commit', headSha]);
+    },
     authOk: async () => (await exec('gh', ['auth', 'status'])).code === 0,
   };
 }
