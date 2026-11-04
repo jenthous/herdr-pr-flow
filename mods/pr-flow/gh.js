@@ -47,6 +47,8 @@ export function createGh(exec) {
   return {
     // Open PRs only: an agent sitting on `main` would otherwise pick up an old merged PR.
     discover: async (repo, branch) => (await json(['pr', 'list', '-R', repo, '--head', branch, '--state', 'open', '--limit', '1', '--json', 'url']))[0]?.url ?? null,
+    // Every open PR you authored, for the `mine` prop.
+    mine: async () => (await json(['search', 'prs', '--author', '@me', '--state', 'open', '--limit', '100', '--json', 'url'])).map((p) => p.url),
     fetchPr: (url) => json(['pr', 'view', url, '--json', PR_FIELDS]),
     fetchThreads: async (url) => {
       const p = parsePrUrl(url);

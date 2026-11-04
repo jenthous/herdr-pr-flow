@@ -12,6 +12,7 @@ const SETTLED_FACTOR = 4;
 const MERGED_KEEP_MS = 24 * 3_600_000;
 const CONCURRENCY = 4;
 const FLOW_POLL_MS = 15_000;
+const MINE_MS = 5 * 60_000;
 
 function clean(pr) {
   return { ...pr, title: sanitize(pr.title), body: sanitize(pr.body) };
@@ -26,6 +27,7 @@ export function createTracker({ gh, remoteOf, store, settings, now = Date.now })
   const remotes = new Map(); // on:cwd -> { at, repo }
   let agents = [];
   let lastError = '';
+  let mineAt = -Infinity;
 
   async function repoOf(agent) {
     const key = `${agent.on ?? ''}:${agent.cwd}`;
@@ -57,6 +59,20 @@ export function createTracker({ gh, remoteOf, store, settings, now = Date.now })
     const entry = track(url, branch);
     store.save(tracked);
     await refresh(entry.url);
+  }
+
+  // With `mine`, every open PR you authored is listed too, agent or not. One search every few minutes;
+  // once listed, a PR refreshes like any other and leaves when it closes or 24 hours after a merge.
+  async function discoverMine() {
+    if (!settings.mine || now() - mineAt < MINE_MS) return;
+    mineAt = now();
+    const urls = await gh.mine().catch((error) => { lastError = error.message; return []; });
+    let added = false;
+    for (const url of urls) {
+      const parsed = parsePrUrl(url);
+      if (parsed && !tracked[parsed.url]) { track(url); added = true; }
+    }
+    if (added) store.save(tracked);
   }
 
   async function refresh(url) {
@@ -150,6 +166,7 @@ export function createTracker({ gh, remoteOf, store, settings, now = Date.now })
       return true;
     });
     await inBatches(unique, discover);
+    await discoverMine();
     const fresh = new Set(finished.flatMap((a) => Object.values(tracked).filter((t) => t.repo === a.repo && t.branch === a.branch).map((t) => t.url)));
     const due = Object.values(tracked).filter((entry) => {
       const data = live.get(entry.url);
