@@ -96,6 +96,7 @@ export default class PrFlow extends View {
         pollMs: Math.max(10_000, Number(p.poll_seconds) * 1000 || 30_000),
         ciWaitMs: parseDuration(p.ci_wait, 120_000),
         aiChecks: (Array.isArray(p.ai_checks) ? p.ai_checks : []).map((x) => String(x).toLowerCase()),
+        mine: p.mine === true,
       },
       remoteOf: async (cwd, on) => {
         const r = await exec("git", ["--no-optional-locks", "remote", "get-url", "origin"], { cwd, on: on ?? undefined });

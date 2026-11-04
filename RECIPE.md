@@ -29,14 +29,14 @@ Colors by state: passed `ansi2`, failed `ansi1`, changes requested `blocked`, ru
 - **Keys**, with the panel focused. List: `j` `k` arrows, `enter`, `g`, `o`, `r`. PR: `enter` or `g`, `o`, `esc` or `backspace`. Issue and settings: `esc` or `backspace`.
 - **Commands.** `pr-flow.next`, `prev`, `open`, `back`, `agent`, `github`, `refresh`, `settings`, `lang-auto`, `lang-ko`, `lang-en`.
 - **Order.** Newest update first. Merged PRs whose workflows have settled go last. The selection stays on its PR when rows move.
-- **What moves.** A timer every 5 s reads agents. PRs are looked for every 30 s for a working agent, every 2 min for an idle one, and straight away when an agent stops working. Open PRs refresh every `poll_seconds`, four times slower with no agent. After a merge only Actions is polled, every 15 s, until runs have finished and 3 minutes have passed. Redraws happen only when something visible changed, plus once a minute for relative times.
+- **What moves.** A timer every 5 s reads agents. PRs are looked for every 30 s for a working agent, every 2 min for an idle one, and straight away when an agent stops working. With `mine`, `gh search prs --author @me --state open` runs every 5 min and adds what it finds. Open PRs refresh every `poll_seconds`, four times slower with no agent. After a merge only Actions is polled, every 15 s, until runs have finished and 3 minutes have passed. Redraws happen only when something visible changed, plus once a minute for relative times.
 - **What leaves.** Closed PRs at once. Merged PRs 24 hours after the merge, once their workflows are finished.
 
 ## Built from
 
 Files in `mods/pr-flow/`: `main.js` (the only file that imports `gpui-kit`, `gpui-base`, `herdr`), `tracker.js` (the loop, with everything injected), `status.js` and `present.js` (state to words), `flow.js` (Actions runs), `gh.js`, `diff.js`, `text.js`, `i18n.js`, and its SVG icons. `mod.json` is `{ "place": "right", "size": 340 }`.
 
-A layout block: `{ "type": "block", "content": { "mod": "pr-flow", "props": { "poll_seconds": 30, "ci_wait": "2m", "ai_checks": [], "lang": "en" } } }`. All props are optional. The viewer is the same mod with `props: { "screen": "viewer" }`, reading its target from `shared("pr-flow.view")`. The chosen language is `shared("pr-flow.lang")`. The PR list is `localStorage`.
+A layout block: `{ "type": "block", "content": { "mod": "pr-flow", "props": { "poll_seconds": 30, "ci_wait": "2m", "ai_checks": [], "mine": false, "lang": "en" } } }`. All props are optional. The viewer is the same mod with `props: { "screen": "viewer" }`, reading its target from `shared("pr-flow.view")`. The chosen language is `shared("pr-flow.lang")`. The PR list is `localStorage`.
 
 Uses `agents()`, `panes()` (`cwd` and `branch` for each agent), `spaces()` (`machine`), `exec`, `run`, `theme`, `settings`, `shared`, `setShared`, `nextCommand`, `window`. Commands: `agent.focus`, `pane.split`, `pane.focus`, `pane.close`, `tab.new`.
 

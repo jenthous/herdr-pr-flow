@@ -139,6 +139,7 @@ PR Flow asks GitHub on a timer, so it can lag behind by the times below.
 | Agent status | 5 seconds |
 | New PR, working agent | 30 seconds, and right after it finishes |
 | New PR, idle agent | 2 minutes |
+| Your open PRs, with `mine` | 5 minutes |
 | Open PR with an agent | `poll_seconds` (30 seconds) |
 | Open PR without an agent | 4 × `poll_seconds` (2 minutes) |
 | Workflows after a merge | 15 seconds while running |
@@ -160,13 +161,14 @@ Everything else goes in the block's `props` in your layout file (`~/.config/herd
 | `poll_seconds` | `30` | How often an open PR refreshes. The minimum is 10 |
 | `ci_wait` | `"2m"` | How long a new commit waits for checks before showing `No CI` |
 | `ai_checks` | `[]` | CI jobs that are really AI review |
+| `mine` | `false` | Also list every open PR you authored, with or without an agent on it |
 | `lang` | system | `"en"` or `"ko"`, used until you choose in settings |
 
 ## What it runs
 
 This is what the mod does on your machine, all with your own login. It stores no credentials.
 
-- `gh pr list`, `gh pr view`, `gh pr diff`, `gh issue view`, `gh run view` and read-only `gh api` calls
+- `gh pr list`, `gh search prs --author @me` (with `mine`), `gh pr view`, `gh pr diff`, `gh issue view`, `gh run view` and read-only `gh api` calls
 - `git remote get-url origin` in each agent's folder
 - `sh` to read your language, and `defaults` on macOS when the app has no `LANG`
 - `open`, `xdg-open` or `explorer.exe` to open a link
@@ -184,7 +186,7 @@ This is what the mod does on your machine, all with your own login. It stores no
 
 ## Limits
 
-- PRs are found through agents running in Herdr. PRs you opened elsewhere, or that only ask for your review, aren't listed.
+- PRs are found through agents running in Herdr. PRs you opened elsewhere aren't listed unless `mine` is on. PRs that only ask for your review aren't listed.
 - The refresh button updates listed PRs. It doesn't look for new ones, which arrive on the timer above.
 - Step-by-step tracking is for GitHub Actions after a merge. Before a merge you see each check's name and result. Deploys outside Actions, such as Vercel, aren't shown.
 - A flow across two PRs, such as `development` then `live`, shows as two separate PRs.

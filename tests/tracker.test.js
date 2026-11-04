@@ -5,17 +5,18 @@ import { createGh, cleanRunLog, parsePrUrl, parseRemote, runIdFromUrl } from '..
 import { sanitize } from '../mods/pr-flow/text.js';
 
 const URL = 'https://github.com/o/r/pull/7';
-function setup({ prs = {}, onBranch = { 'o/r:feat': URL } } = {}) {
-  const calls = { discover: 0, fetch: 0 };
+function setup({ prs = {}, onBranch = { 'o/r:feat': URL }, mine = null } = {}) {
+  const calls = { discover: 0, fetch: 0, mine: 0 };
   let clock = 1_000_000;
   const gh = {
     discover: async (repo, branch) => { calls.discover += 1; return onBranch[`${repo}:${branch}`] ?? null; },
     fetchPr: async (url) => { calls.fetch += 1; return { url, title: 'T‮', body: '', state: 'OPEN', headRefOid: 'a', headRefName: 'feat', statusCheckRollup: [], updatedAt: '2026-01-01T00:00:00Z', ...prs[url] }; },
     fetchThreads: async () => ({ threads: [], headCommittedAt: null }),
+    mine: async () => { calls.mine += 1; return mine ?? []; },
   };
   const saved = {};
   const tracker = createTracker({
-    gh, settings: { pollMs: 30_000, ciWaitMs: 120_000, aiChecks: [] }, now: () => clock,
+    gh, settings: { pollMs: 30_000, ciWaitMs: 120_000, aiChecks: [], mine: mine !== null }, now: () => clock,
     remoteOf: async () => 'o/r',
     store: { load: () => ({}), save: (d) => Object.assign(saved, { d }) },
   });
@@ -96,6 +97,35 @@ test('closed PRs leave, merged ones stay a day, and a merged PR stops polling', 
   assert.equal(merged.calls.fetch, fetched);
 });
 
+test('without `mine`, PRs without an agent are not searched for', async () => {
+  const { tracker, calls } = setup({ onBranch: {} });
+  await tracker.tick([]);
+  assert.equal(calls.mine, 0);
+  assert.equal(tracker.cards().length, 0);
+});
+
+test('with `mine`, your open PRs are listed without an agent, and searched again only after a while', async () => {
+  const other = 'https://github.com/o/s/pull/3';
+  const { tracker, calls, advance } = setup({ onBranch: {}, mine: [other, `${URL}/files`] });
+  await tracker.tick([]);
+  assert.deepEqual(tracker.cards().map((c) => c.number).sort(), [3, 7]);
+  assert.equal(tracker.cards()[0].agent, null);
+  advance(60_000);
+  await tracker.tick([]);
+  assert.equal(calls.mine, 1);
+  advance(5 * 60_000);
+  await tracker.tick([]);
+  assert.equal(calls.mine, 2);
+  assert.equal(tracker.cards().length, 2);
+});
+
+test('with `mine`, a PR an agent also sits on is listed once, with the agent', async () => {
+  const { tracker } = setup({ mine: [URL] });
+  await tracker.tick([agent()]);
+  assert.equal(tracker.cards().length, 1);
+  assert.equal(tracker.cards()[0].agent.address, 't1');
+});
+
 test('a gh failure keeps the row and reports the message', async () => {
   const { tracker } = setup();
   tracker.track(URL, 'feat');
@@ -111,9 +141,9 @@ test('a gh failure keeps the row and reports the message', async () => {
 
 test('createGh only ever calls read commands', async () => {
   const seen = [];
-  const gh = createGh(async (cmd, args) => { seen.push([cmd, ...args].join(' ')); return { code: 0, stdout: args[0] === 'pr' && args[1] === 'list' ? '[]' : '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[]},"commits":{"nodes":[]}}}}}', stderr: '' }; });
-  await gh.discover('o/r', 'feat'); await gh.fetchPr(URL); await gh.fetchThreads(URL); await gh.fetchDiff(URL); await gh.failedLog('o/r', '1'); await gh.authOk();
-  for (const line of seen) assert.match(line, /^gh (pr (list|view|diff)|api graphql|run view|auth status)\b/);
+  const gh = createGh(async (cmd, args) => { seen.push([cmd, ...args].join(' ')); return { code: 0, stdout: (args[0] === 'pr' && args[1] === 'list') || args[0] === 'search' ? '[]' : '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[]},"commits":{"nodes":[]}}}}}', stderr: '' }; });
+  await gh.discover('o/r', 'feat'); await gh.mine(); await gh.fetchPr(URL); await gh.fetchThreads(URL); await gh.fetchDiff(URL); await gh.failedLog('o/r', '1'); await gh.authOk();
+  for (const line of seen) assert.match(line, /^gh (pr (list|view|diff)|search prs|api graphql|run view|auth status)\b/);
   assert.ok(!seen.some((l) => /mutation|--method|--web/.test(l)));
 });
 

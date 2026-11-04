@@ -139,6 +139,7 @@ PR Flow는 일정 주기로 GitHub에 물어봅니다. 그래서 아래 시간�
 | 에이전트 상태 | 5초 |
 | 새 PR, 작업 중인 에이전트 | 30초, 그리고 작업을 마친 직후 |
 | 새 PR, 대기 중인 에이전트 | 2분 |
+| 내가 올린 열린 PR, `mine`일 때 | 5분 |
 | 열린 PR, 에이전트 있음 | `poll_seconds` (30초) |
 | 열린 PR, 에이전트 없음 | `poll_seconds`의 4배 (2분) |
 | 머지 후 워크플로 | 실행 중에 15초 |
@@ -160,13 +161,14 @@ PR Flow는 일정 주기로 GitHub에 물어봅니다. 그래서 아래 시간�
 | `poll_seconds` | `30` | 열린 PR의 갱신 주기. 최솟값은 10 |
 | `ci_wait` | `"2m"` | 새 커밋 후 체크를 기다렸다가 `CI 없음`으로 표시하기까지의 시간 |
 | `ai_checks` | `[]` | 실제로는 AI 리뷰인 CI 작업 |
+| `mine` | `false` | 에이전트가 있든 없든, 내가 올린 열린 PR도 모두 보여줌 |
 | `lang` | 시스템 언어 | `"en"` 또는 `"ko"`. 설정에서 고르기 전까지 적용 |
 
 ## 실행하는 명령
 
 이 모드가 PC에서 실행하는 명령입니다. 모두 사용자의 로그인으로 실행하고, 인증 정보는 저장하지 않습니다.
 
-- `gh pr list`, `gh pr view`, `gh pr diff`, `gh issue view`, `gh run view`, 읽기 전용 `gh api` 호출
+- `gh pr list`, `gh search prs --author @me` (`mine`일 때), `gh pr view`, `gh pr diff`, `gh issue view`, `gh run view`, 읽기 전용 `gh api` 호출
 - 각 에이전트 폴더에서 `git remote get-url origin`
 - 언어를 읽는 `sh`, 앱에 `LANG`이 없을 때 macOS의 `defaults`
 - 링크를 여는 `open`, `xdg-open`, `explorer.exe`
@@ -184,7 +186,7 @@ PR Flow는 일정 주기로 GitHub에 물어봅니다. 그래서 아래 시간�
 
 ## 제한 사항
 
-- PR은 Herdr에서 돌아가는 에이전트를 통해 찾습니다. 다른 곳에서 올린 PR이나 리뷰 요청만 받은 PR은 나오지 않습니다.
+- PR은 Herdr에서 돌아가는 에이전트를 통해 찾습니다. 다른 곳에서 올린 PR은 `mine`을 켜야 나옵니다. 리뷰 요청만 받은 PR은 나오지 않습니다.
 - 새로고침 버튼은 목록에 있는 PR만 갱신합니다. 새 PR은 위 주기에 맞춰 나타납니다.
 - 단계별 추적은 머지 후 GitHub Actions만 지원합니다. 머지 전에는 체크 이름과 결과까지 보여줍니다. Vercel처럼 Actions 밖에서 도는 배포는 보이지 않습니다.
 - `development` 다음 `live`처럼 PR이 두 번 올라가는 흐름은 별개의 PR로 보입니다.
