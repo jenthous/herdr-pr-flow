@@ -2,6 +2,8 @@
 
 [English](README.md) | **한국어**
 
+![PR Flow: Herdr 옆 패널의 PR 목록과 PR 타임라인](docs/thumbnail.png)
+
 에이전트가 올린 PR이 어디까지 갔는지 보여주는 [Herdr 앱](https://herdr.dev)용 옆 패널입니다. CI부터 머지 후 실행되는 워크플로까지 볼 수 있습니다.
 
 ![에이전트 옆의 PR Flow: PR이 CI를 거쳐 머지되고, 배포 워크플로가 단계별로 진행되며, 연결된 이슈와 diff가 열립니다](docs/demo-ko.gif)

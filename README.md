@@ -2,6 +2,8 @@
 
 **English** | [한국어](README.ko.md)
 
+![PR Flow: a PR list and a PR timeline in the Herdr side panel](docs/thumbnail.png)
+
 A side panel for the [Herdr app](https://herdr.dev) that shows every pull request your agents opened and where each one is, from CI through to the workflows that run after a merge.
 
 ![PR Flow beside an agent: a PR goes from CI to merged, its deploy workflow runs step by step, then a linked issue and a diff open](docs/demo.gif)
