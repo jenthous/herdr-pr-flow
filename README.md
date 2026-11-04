@@ -61,7 +61,7 @@ To update, copy the folder again. To remove it, press `cmd-shift-l` to go back t
 
 ## Using it
 
-**1. Watch the list.** Each card shows the PR, its repo and number, its linked issue, CI and review, and the agent working on it. Click a card to open it. When the PRs span more than one owner, a row of chips under the title shows one owner's PRs (user or organization, with counts); `All` shows them all again. The choice is remembered.
+**1. Watch the list.** Each card shows the PR, its repo and number, its linked issue, CI and review, and the agent working on it. Click a card to open it. When the PRs span more than one owner, a row of chips under the title shows one owner's PRs (user or organization, with counts); `All` shows them all again. With an owner chosen who has PRs in more than one repo, a second row does the same per repo. The choice is remembered.
 
 <img src="docs/images/en/list.png" width="340" alt="A list of four PRs with their CI, review, linked issue and agent">
 
