@@ -1,42 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createEngine } from '../src/engine.js';
-import { parseConfig } from '../src/config.js';
+import { settingsFrom } from '../src/config.js';
 
 const URL = 'https://github.com/acme/shop/pull/7';
 
-function setup({ agentStatus = 'idle', prOver = {}, autoFix = true, canAct = true, dryRun = false, threads = [], discoverUrl = URL, branch = 'fix' } = {}) {
-  const calls = { prompts: [], notifies: [], tokens: [] };
-  let time = 1_000_000;
-  const world = {
-    pr: {
-      number: 7, title: '쿠폰 수정', body: '', url: URL, state: 'OPEN', isDraft: false, author: { login: 'me' }, headRefName: 'fix', headRefOid: 'sha1', baseRefName: 'main',
-      statusCheckRollup: [{ name: 'unit', status: 'COMPLETED', conclusion: 'FAILURE', detailsUrl: 'https://github.com/acme/shop/actions/runs/99/job/1' }],
-      reviewDecision: '', reviewRequests: [], latestReviews: [], mergeStateStatus: 'CLEAN', mergeable: 'MERGEABLE', ...prOver,
-    },
-    threads,
-    status: agentStatus,
-  };
+function setup({ discoverUrl = URL, prOver = {}, status = 'idle' } = {}) {
+  let time = 1_000_000_000;
+  const world = { status, committedAt: null, pr: { number: 7, title: '쿠폰', url: URL, state: 'OPEN', headRefName: 'fix', headRefOid: 'sha1', statusCheckRollup: [], updatedAt: new Date(time).toISOString(), ...prOver } };
   const gh = {
-    viewer: async () => 'me',
     discover: async () => discoverUrl,
     fetchPr: async () => world.pr,
-    fetchConversation: async () => ({ threads: world.threads, comments: [], headCommittedAt: world.committedAt ?? null }),
-    repoInfo: async () => ({ defaultBranchRef: { name: 'main' }, squashMergeAllowed: true, viewerDefaultMergeMethod: 'SQUASH' }),
-    recentReviewers: async () => [],
-    failedLog: async () => 'assert failed at line 88',
+    fetchThreads: async () => ({ threads: [], headCommittedAt: world.committedAt }),
   };
-  const herdr = {
-    listAgents: async () => [{ pane_id: 'p1', agent: 'claude', agent_status: world.status, cwd: '/w/fix', terminal_title_stripped: 'editing' }],
-    prompt: async (pane, text) => calls.prompts.push({ pane, text }),
-    notify: async (title, body) => calls.notifies.push({ title, body }),
-    reportToken: async (_pane, _source, value) => calls.tokens.push(value),
-  };
-  const git = { describe: async () => ({ root: '/w/fix', branch, repo: 'acme/shop' }) };
-  const store = { data: { tracked: {}, autoFixEnabled: autoFix }, save() {} };
-  const logs = [];
-  const engine = createEngine({ gh, herdr, git, store, config: parseConfig(''), canAct: () => canAct, dryRun, now: () => time, log: (m) => logs.push(m) });
-  return { engine, calls, world, store, logs, advance: (ms) => { time += ms; } };
+  const herdr = { listAgents: async () => [{ pane_id: 'p1', agent: 'claude', agent_status: world.status, cwd: '/w/fix' }] };
+  const git = { describe: async () => ({ root: '/w/fix', branch: 'fix', repo: 'acme/shop' }) };
+  const store = { data: { tracked: {} }, save() {} };
+  const engine = createEngine({ gh, herdr, git, store, settings: settingsFrom({}, {}), now: () => time });
+  return { engine, world, store, gh, advance: (ms) => { time += ms; } };
 }
 
 async function boot(ctx) {
@@ -44,141 +25,93 @@ async function boot(ctx) {
   ctx.engine.stop();
 }
 
-test('finds the PR from the agent branch and sends the CI failure once', async () => {
+test('exposes only reading from GitHub and herdr', () => {
+  // The fakes above have no write methods, so any write call would throw in these tests.
   const ctx = setup();
-  await boot(ctx);
-  assert.equal(ctx.calls.prompts.length, 1);
-  assert.equal(ctx.calls.prompts[0].pane, 'p1');
-  assert.match(ctx.calls.prompts[0].text, /assert failed at line 88/);
-  assert.match(ctx.calls.prompts[0].text, /UNTRUSTED/);
-  await ctx.engine.refresh(URL);
-  assert.equal(ctx.calls.prompts.length, 1);
-  assert.equal(ctx.store.data.tracked[URL].fix.attempts, 1);
+  assert.deepEqual(Object.keys(ctx.gh).sort(), ['discover', 'fetchPr', 'fetchThreads']);
 });
 
-test('an agent that stops without a new commit comes back to you, and is not sent it again', async () => {
+test('finds the PR from the agent branch and links the agent', async () => {
   const ctx = setup();
   await boot(ctx);
-  assert.equal(ctx.engine.cards()[0].column, 'agent');
-  assert.equal(ctx.engine.cards()[0].headline, 'CI failure sent to agent');
-  ctx.advance(60_000);
-  await ctx.engine.refresh(URL);
   const [card] = ctx.engine.cards();
-  assert.equal(card.column, 'you');
-  assert.equal(card.headline, 'agent stopped, CI still failing');
-  assert.equal(ctx.calls.prompts.length, 1);
-  assert.equal(ctx.calls.notifies.length, 1);
-  assert.match(ctx.calls.notifies[0].title, /agent stopped/);
+  assert.equal(card.number, 7);
+  assert.equal(card.agent.pane_id, 'p1');
 });
 
-test('a new commit that still fails goes back to the agent', async () => {
-  const ctx = setup();
+test('an agent with no PR shows nothing', async () => {
+  const ctx = setup({ discoverUrl: null });
   await boot(ctx);
-  ctx.advance(60_000);
-  await ctx.engine.refresh(URL);
-  ctx.world.pr = { ...ctx.world.pr, headRefOid: 'sha2' };
-  await ctx.engine.refresh(URL);
-  assert.equal(ctx.calls.prompts.length, 2);
-  assert.equal(ctx.engine.cards()[0].column, 'agent');
+  assert.deepEqual(ctx.engine.cards(), []);
 });
 
 test('an agent finishing refreshes its PR right away', async () => {
-  const ctx = setup({ agentStatus: 'working', prOver: { statusCheckRollup: [] } });
+  const ctx = setup({ status: 'working' });
   await boot(ctx);
   ctx.world.pr = { ...ctx.world.pr, title: 'pushed just now' };
   ctx.world.status = 'done';
   await ctx.engine.pollAgents();
-  assert.equal(ctx.engine.cards()[0].data.pr.title, 'pushed just now');
+  assert.equal(ctx.engine.cards()[0].pr.title, 'pushed just now');
 });
 
-test('dry run logs the prompt and sends nothing', async () => {
-  const ctx = setup({ dryRun: true });
+test('an old commit does not wait for CI when first seen', async () => {
+  const ctx = setup();
+  ctx.world.committedAt = new Date(1_000_000_000 - 3_600_000).toISOString();
   await boot(ctx);
-  assert.equal(ctx.calls.prompts.length, 0);
-  assert.match(ctx.logs[0], /\[dry-run\] would send to p1/);
+  assert.equal(ctx.engine.cards()[0].status.ci.kind, 'none');
 });
 
-test('a view-only board never sends or notifies', async () => {
-  const ctx = setup({ canAct: false });
+test('a new commit waits for CI again', async () => {
+  const ctx = setup();
   await boot(ctx);
-  assert.equal(ctx.calls.prompts.length, 0);
-  assert.equal(ctx.calls.notifies.length, 0);
-});
-
-test('auto-fix off puts the failure on your turn and notifies', async () => {
-  const ctx = setup({ autoFix: false });
-  await boot(ctx);
-  assert.equal(ctx.calls.prompts.length, 0);
-  assert.equal(ctx.engine.cards()[0].column, 'you');
-  assert.equal(ctx.calls.notifies.length, 1);
-  assert.match(ctx.calls.notifies[0].title, /#7/);
-});
-
-test('someone else’s PR is never sent to the agent', async () => {
-  const ctx = setup({ prOver: { author: { login: 'teammate' } } });
-  await boot(ctx);
-  assert.equal(ctx.calls.prompts.length, 0);
-  assert.equal(ctx.engine.cards()[0].column, 'you');
-});
-
-test('a working agent is not interrupted', async () => {
-  const ctx = setup({ agentStatus: 'working' });
-  await boot(ctx);
-  assert.equal(ctx.calls.prompts.length, 0);
-  assert.equal(ctx.engine.cards()[0].column, 'agent');
-});
-
-test('new commit resets the wait for CI', async () => {
-  const ctx = setup({ prOver: { statusCheckRollup: [], author: { login: 'me' } } });
-  await boot(ctx);
-  ctx.advance(10 * 60_000);
+  ctx.advance(600_000);
   await ctx.engine.refresh(URL);
-  assert.equal(ctx.engine.cards()[0].result.ci.kind, 'none');
+  assert.equal(ctx.engine.cards()[0].status.ci.kind, 'none');
   ctx.world.pr = { ...ctx.world.pr, headRefOid: 'sha2' };
   await ctx.engine.refresh(URL);
-  assert.equal(ctx.engine.cards()[0].result.ci.kind, 'starting');
+  assert.equal(ctx.engine.cards()[0].status.ci.kind, 'running');
 });
 
-test('an old commit does not wait for CI when first tracked', async () => {
-  const ctx = setup({ prOver: { statusCheckRollup: [] } });
-  ctx.world.committedAt = new Date(1_000_000 - 3_600_000).toISOString();
+test('a merged PR stays 24 hours and a closed PR leaves', async () => {
+  const ctx = setup();
   await boot(ctx);
-  assert.equal(ctx.engine.cards()[0].result.ci.kind, 'none');
-});
-
-test('an agent with a feature branch and no PR shows as no PR yet', async () => {
-  const ctx = setup({ discoverUrl: null });
-  await boot(ctx);
-  ctx.engine.cards(); // first call loads the repo's default branch
-  await new Promise((resolve) => setImmediate(resolve));
-  const [card] = ctx.engine.cards();
-  assert.equal(card.noPr, true);
-  assert.equal(card.column, 'agent');
-  assert.equal(card.branch, 'fix');
-  assert.equal(ctx.calls.prompts.length, 0);
-});
-
-test('a blocked agent with no PR comes to your turn', async () => {
-  const ctx = setup({ discoverUrl: null, agentStatus: 'blocked' });
-  await boot(ctx);
-  ctx.engine.cards();
-  await new Promise((resolve) => setImmediate(resolve));
-  const [card] = ctx.engine.cards();
-  assert.equal(card.column, 'you');
-  assert.equal(card.headline, 'agent needs your input');
-});
-
-test('an agent on the default branch with no PR is not shown', async () => {
-  const ctx = setup({ discoverUrl: null, branch: 'main' });
-  await boot(ctx);
-  ctx.engine.cards();
-  await new Promise((resolve) => setImmediate(resolve));
+  ctx.world.pr = { ...ctx.world.pr, state: 'MERGED', mergedAt: new Date(1_000_000_000).toISOString() };
+  await ctx.engine.refresh(URL);
+  assert.equal(ctx.engine.cards()[0].status.name, 'merged');
+  ctx.advance(25 * 3_600_000);
+  await ctx.engine.refresh(URL);
   assert.deepEqual(ctx.engine.cards(), []);
+
+  const closed = setup();
+  await boot(closed);
+  closed.world.pr = { ...closed.world.pr, state: 'CLOSED' };
+  await closed.engine.refresh(URL);
+  assert.deepEqual(closed.engine.cards(), []);
 });
 
-test('a merged PR leaves the auto-fix loop and shows in merged', async () => {
-  const ctx = setup({ prOver: { state: 'MERGED', mergedAt: new Date(1_000_000).toISOString() } });
+test('open PRs sort by activity, merged PRs go last', async () => {
+  const ctx = setup();
   await boot(ctx);
-  assert.equal(ctx.calls.prompts.length, 0);
-  assert.equal(ctx.engine.cards()[0].column, 'merged');
+  const a = 'https://github.com/acme/shop/pull/1';
+  const b = 'https://github.com/acme/shop/pull/2';
+  ctx.gh.fetchPr = async (url) => ({
+    [URL]: { ...ctx.world.pr, state: 'MERGED', mergedAt: new Date(1_000_000_000).toISOString(), updatedAt: new Date(2_000_000_000).toISOString() },
+    [a]: { ...ctx.world.pr, number: 1, updatedAt: new Date(1_000).toISOString() },
+    [b]: { ...ctx.world.pr, number: 2, updatedAt: new Date(2_000).toISOString() },
+  }[url]);
+  ctx.engine.track(a);
+  ctx.engine.track(b);
+  await Promise.all([URL, a, b].map((u) => ctx.engine.refresh(u)));
+  assert.deepEqual(ctx.engine.cards().map((c) => c.number), [2, 1, 7]);
+});
+
+test('a failed refresh keeps the last data and reports the error', async () => {
+  const ctx = setup();
+  await boot(ctx);
+  ctx.gh.fetchPr = async () => {
+    throw new Error('rate limited');
+  };
+  await ctx.engine.refresh(URL);
+  assert.equal(ctx.engine.cards()[0].number, 7);
+  assert.match(ctx.engine.status().lastError, /rate limited/);
 });

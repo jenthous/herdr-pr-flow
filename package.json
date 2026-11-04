@@ -1,8 +1,8 @@
 {
   "name": "herdr-pr-flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Herdr plugin: track agent pull requests from open to merge without opening GitHub.",
+  "description": "Herdr plugin: see every PR your agents opened and where each one is.",
   "type": "module",
   "engines": { "node": ">=20" },
   "scripts": { "test": "node --test tests/" },

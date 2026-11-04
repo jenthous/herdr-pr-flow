@@ -1,3 +1,4 @@
 node_modules/
 *.log
 .DS_Store
+pr-flow/mods/pr-flow/gpui-kit.d.ts
