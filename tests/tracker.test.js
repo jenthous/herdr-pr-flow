@@ -147,6 +147,15 @@ test('createGh only ever calls read commands', async () => {
   assert.ok(!seen.some((l) => /mutation|--method|--web/.test(l)));
 });
 
+test('createGh merges only the shown commit, with a known method', async () => {
+  const seen = [];
+  const gh = createGh(async (cmd, args) => { seen.push([cmd, ...args].join(' ')); return { code: 0, stdout: '', stderr: '' }; });
+  await gh.merge(URL, 'squash', 'abc');
+  assert.deepEqual(seen, [`gh pr merge ${URL} --squash --match-head-commit abc`]);
+  await assert.rejects(gh.merge(URL, 'admin', 'abc'), /unknown merge method/);
+  assert.equal(seen.length, 1);
+});
+
 test('createGh turns a failed command into an error with its message', async () => {
   const gh = createGh(async () => ({ code: 1, stdout: '', stderr: 'nope' }));
   await assert.rejects(gh.fetchDiff(URL), /nope/);

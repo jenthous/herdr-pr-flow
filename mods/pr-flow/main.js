@@ -3,7 +3,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, TextView, v_virtual_list } from "gpui-base";
 import { agents, panes, spaces, focused, exec, run, theme, props, settings, shared, setShared, nextCommand, window as appWindow } from "herdr";
-import { createGh, parseRemote, runIdFromUrl } from "./gh.js";
+import { MERGE_METHODS, createGh, parseRemote, runIdFromUrl } from "./gh.js";
 import { createTracker } from "./tracker.js";
 import { translator, relative, effectiveLang } from "./i18n.js";
 import { facts, steps, openThreads, logTail, flowLine, flowRows, jobSteps, issueState, issueLabel, orgsOf, byOrg, reposOf, byRepo } from "./present.js";
@@ -117,6 +117,12 @@ export default class PrFlow extends View {
     this.issueData = new Map(); // url -> issue, or { failed: true }
     this.ghReady = true;
     this.busy = false;
+    // The merge button, only with the `merge` prop ("squash", "merge" or "rebase"). The first press
+    // arms it for a few seconds, the second merges.
+    this.mergeMethod = MERGE_METHODS.includes(p.merge) ? p.merge : null;
+    this.mergeArmed = null; // url
+    this.merging = null; // url
+    this.mergeError = null; // { url, message }
     this.tick(cx);
     cx.timer.every(TICK_MS, (cx) => this.tick(cx));
     cx.timer.every(60_000, (cx) => cx.notify()); // "5분 전" moves on
@@ -252,6 +258,47 @@ export default class PrFlow extends View {
       catch { entry.failed = true; }
       cx.notify();
     });
+  }
+
+  canMerge(card) {
+    const pr = card.pr;
+    return Boolean(this.mergeMethod && pr && pr.state === "OPEN" && !pr.isDraft && pr.mergeable === "MERGEABLE" && card.status?.name === "ready");
+  }
+
+  pressMerge(card, cx) {
+    if (this.merging || !this.canMerge(card)) return;
+    if (this.mergeArmed !== card.url) {
+      this.mergeArmed = card.url;
+      this.mergeError = null;
+      cx.timer.after(4000, (cx) => { if (this.mergeArmed === card.url) { this.mergeArmed = null; cx.notify(); } });
+      return;
+    }
+    this.mergeArmed = null;
+    this.merging = card.url;
+    const sha = card.pr.headRefOid;
+    cx.spawn(async (cx) => {
+      try {
+        await this.gh.merge(card.url, this.mergeMethod, sha);
+        await this.tracker.refresh(card.url);
+      } catch (error) {
+        this.mergeError = { url: card.url, message: sanitize(error.message) };
+      }
+      this.merging = null;
+      cx.notify();
+    });
+  }
+
+  mergeButton(card, t) {
+    const tr = this.t, armed = this.mergeArmed === card.url, busy = this.merging === card.url;
+    const label = busy ? tr("merging") : armed ? tr("merge_confirm") : tr("merge_do", this.mergeMethod);
+    return v_flex().px(14).pt(12).gap(6)
+      .child(h_flex().id("merge").w_full().h(32).gap(6).items_center().justify_center().rounded(8)
+        .bg(armed ? t.ansi2 : t.raised).text_color(armed ? t.background : t.foreground)
+        .when(!busy, (e) => e.cursor_pointer().hover((s) => s.opacity(0.88)))
+        .on_click((_e, cx) => { this.pressMerge(card, cx); cx.notify(); })
+        .child(busy ? icon("spinner", 12, t.working).spin(900) : icon("merge", 13, armed ? t.background : t.ansi2))
+        .child(div().text_size(12.5).font_medium().child(label)))
+      .when(this.mergeError?.url === card.url, (e) => e.child(div().text_size(11.5).text_color(t.ansi1).child(this.mergeError.message)));
   }
 
   logFor(card) {
@@ -484,6 +531,7 @@ export default class PrFlow extends View {
           .child(div().text_size(15).font_semibold().child(pr.title))
           .child(div().text_size(11.5).text_color(t.dim).child(`${card.repo} #${card.number}`))
           .child(h_flex().gap(5).items_center().text_size(11.5).text_color(t.muted).child(icon("branch", 12, t.dim)).child(div().min_w(0).truncate().child(`${pr.headRefName} → ${pr.baseRefName}`))))
+        .when(this.canMerge(card) || this.merging === card.url || this.mergeError?.url === card.url, (e) => e.child(this.mergeButton(card, t)))
         .when(Boolean(agent), (e) => e.child(div().px(14).pt(12).child(
           h_flex().id("agent").w_full().px(10).h(38).gap(8).items_center().rounded(8).bg(t.raised).cursor_pointer().hover((s) => s.bg(t.hover)).on_click(() => this.goToAgent(card))
             .child(agentDot(agent.status, t))

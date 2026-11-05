@@ -1,6 +1,6 @@
 # PR Flow
 
-A full-height panel on the right of the Herdr window. It lists every open pull request that belongs to a branch an agent is working on, and shows where each one is: CI, review, merge, then the GitHub Actions workflows that run on the merge commit. Clicking a PR swaps the list for its detail in the same panel. It only reads.
+A full-height panel on the right of the Herdr window. It lists every open pull request that belongs to a branch an agent is working on, and shows where each one is: CI, review, merge, then the GitHub Actions workflows that run on the merge commit. Clicking a PR swaps the list for its detail in the same panel. It only reads, unless the `merge` prop turns on a merge button.
 
 ![PR Flow](preview.png)
 
@@ -45,6 +45,8 @@ Uses `agents()`, `panes()` (`cwd` and `branch` for each agent), `spaces()` (`mac
 Programs: `gh` (`pr list`, `pr view`, `pr diff`, `issue view`, `run view`, `auth status`, `api` with the GraphQL review threads and linked issues query, `actions/runs?head_sha=`, `actions/runs/<id>/jobs`), `git remote get-url origin`, `sh`, `defaults`, and `open`, `xdg-open` or `explorer.exe`. Nothing it calls writes to GitHub.
 
 ## Watch out
+
+- The merge button (`merge`: `"squash"`, `"merge"` or `"rebase"`; anything else, no button) shows under the branch line only when the PR is open, not a draft, `mergeable` is `MERGEABLE` and the state is `ready`. 32 px, radius 8, `raised`; armed, `ansi2` with `background` text for 4 s. It runs `gh pr merge <url> --<method> --match-head-commit <headRefOid shown>`, then refreshes the PR; an error shows under it in `ansi1`. Never `--admin`, never `--delete-branch`.
 
 - Shipped layouts don't take new panels: a mod with `place: "right"` docks only into a personal layout, so `layout.clone` first.
 - A virtual list's rows can't register `on_click`, and `herdr-app check` doesn't catch it, since it doesn't run deferred rows. The list is a plain scrolling column.

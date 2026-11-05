@@ -10,7 +10,7 @@ A side panel for the [Herdr app](https://herdr.dev) that shows every pull reques
 
 *The real mod in the Herdr app, drawn with made-up projects and data.*
 
-PR Flow only reads. It never writes to GitHub or sends anything to an agent. When something needs doing, jump to the agent and tell it there.
+PR Flow only reads, unless you turn on the merge button (`merge`, off by default). It never sends anything to an agent. When something needs doing, jump to the agent and tell it there.
 
 - **No setup.** A PR appears when an agent running in Herdr has one open on its branch.
 - **Plain facts.** `No CI` and `No review` say so, and never count as passed.
@@ -86,6 +86,8 @@ To update, copy the folder again. To remove it, press `cmd-shift-l` to go back t
 **6. See the changes.** Click a changed file or a failed log to open it in a pane beside your terminal. Opening another file replaces what the pane shows.
 
 <img src="docs/images/en/diff.png" alt="A file diff in a pane beside the panel">
+
+**Merge (optional).** With `merge` set, a PR that is ready to merge gets a `Merge (squash)` button under its branch. The first press arms it for 4 seconds (`Press again to merge`), the second merges. It merges only the commit you were looking at: if something was pushed since, GitHub refuses and the panel shows why.
 
 **7. Tell the agent.** Click the agent row at the top of a PR to jump to its terminal.
 
@@ -164,6 +166,7 @@ Everything else goes in the block's `props` in your layout file (`~/.config/herd
 | `ci_wait` | `"2m"` | How long a new commit waits for checks before showing `No CI` |
 | `ai_checks` | `[]` | CI jobs that are really AI review |
 | `mine` | `false` | Also list every open PR you authored, with or without an agent on it |
+| `merge` | none | `"squash"`, `"merge"` or `"rebase"`: show a merge button on PRs ready to merge, using that method. Unset, nothing is ever written |
 | `lang` | system | `"en"` or `"ko"`, used until you choose in settings |
 
 ## What it runs
@@ -171,6 +174,7 @@ Everything else goes in the block's `props` in your layout file (`~/.config/herd
 This is what the mod does on your machine, all with your own login. It stores no credentials.
 
 - `gh pr list`, `gh search prs --author @me` (with `mine`), `gh pr view`, `gh pr diff`, `gh issue view`, `gh run view` and read-only `gh api` calls
+- With `merge`, when you press the button twice: `gh pr merge <url> --<method> --match-head-commit <sha>`. No `--admin`, no branch deletion
 - `git remote get-url origin` in each agent's folder
 - `sh` to read your language, and `defaults` on macOS when the app has no `LANG`
 - `open`, `xdg-open` or `explorer.exe` to open a link

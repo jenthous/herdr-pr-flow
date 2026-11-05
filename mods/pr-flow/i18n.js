@@ -14,6 +14,7 @@ const STRINGS = {
     flow_done: (n) => `${n} runs after merge finished`, flow_failed: (name) => `${name} failed`, flow_more: (n) => `+${n} more`, flow_checking: 'Checking for runs…', flow_waiting: 'waiting for approval', flow_queued: 'queued', flow_cancelled: 'cancelled', flow_failed_note: 'failed', run_log: 'Show log', merged_to: (base) => `Merged → ${base}`,
     checks: (n) => `Checks ${n}`, issues: (n) => `Linked issues ${n}`, issues_none: 'No linked issues', issue_none: 'No issue', issue_one: (n) => `Issue #${n}`, issue_many: (n) => `${n} issues`, issue_open: 'Open', issue_closed: 'Closed', issue_not_planned: 'Not planned', issue_comments: (n) => `Comments ${n}`, issue_failed: 'Could not load this issue. Open it on GitHub.',
     org_all: 'All', repo_all: 'All repos',
+    merge_do: (m) => `Merge (${m})`, merge_confirm: 'Press again to merge', merging: 'Merging…',
     settings: 'Settings', language: 'Language', lang_auto: 'Follow system', just_now: 'just now', ago: (n, u) => `${n}${{ m: 'm', h: 'h', d: 'd' }[u]} ago`, close: 'Close',
   },
   ko: {
@@ -31,6 +32,7 @@ const STRINGS = {
     flow_done: (n) => `머지 후 실행 ${n}개 완료`, flow_failed: (name) => `${name} 실패`, flow_more: (n) => `외 ${n}개`, flow_checking: '실행 확인 중…', flow_waiting: '승인 대기', flow_queued: '대기 중', flow_cancelled: '취소됨', flow_failed_note: '실패', run_log: '로그 보기', merged_to: (base) => `머지됨 → ${base}`,
     checks: (n) => `체크 ${n}`, issues: (n) => `연결된 이슈 ${n}`, issues_none: '연결된 이슈 없음', issue_none: '이슈 없음', issue_one: (n) => `이슈 #${n}`, issue_many: (n) => `이슈 ${n}개`, issue_open: '열림', issue_closed: '닫힘', issue_not_planned: '계획 안 함', issue_comments: (n) => `코멘트 ${n}`, issue_failed: '이슈를 불러오지 못했습니다. GitHub에서 확인하세요.',
     org_all: '전체', repo_all: '모든 레포',
+    merge_do: (m) => `머지 (${m})`, merge_confirm: '한 번 더 누르면 머지', merging: '머지하는 중…',
     settings: '설정', language: '언어', lang_auto: '시스템 언어 따르기', just_now: '방금', ago: (n, u) => `${n}${{ m: '분', h: '시간', d: '일' }[u]} 전`, close: '닫기',
   },
 };
